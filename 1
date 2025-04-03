@@ -1,0 +1,308 @@
+#include <iostream>
+#include <vector>
+#include <string>
+#include <algorithm>
+
+using namespace std;
+
+const int WORD_REQUIREMENT = 2;
+int stopper = 0;
+int stop = 1000;
+
+float STRAIGHT_VALUE = 1.0f;
+float DIAGINAL_VALUE = 1.5f;
+
+float min_dif = 1000.0f;
+float max_dif = 0.1f;
+float avr_dif = 0.1f;
+
+struct square
+{
+    char letter = ' ';
+    bool layer = 0;
+};
+
+class Word
+{
+public:
+    string letters;
+    int len;
+    int letterNumbers[26];
+
+    void countLetters()
+    {
+        for (int i = 0; i < 26; i++) letterNumbers[i] = 0;
+
+        for (int i = 0; i < len; i++)
+            letterNumbers[(int)letters[i] - 'a']++;
+    }
+
+    friend istream& operator>> (istream& stream, Word& word);
+};
+
+istream& operator>> (istream& stream, Word& word)
+{
+    string s;
+    stream >> s;
+    for (int i = 0; i < s.size(); i++) 
+        if (s[i] >= 'A' and s[i] <= 'Z') s[i] += 'a' - 'A';
+
+    word.letters = s;
+    word.len = word.letters.size();
+    word.countLetters();
+
+    return stream;
+}
+
+class Bowl
+{
+public:
+    square grid[4][4];
+    float difficulty = 0.0f;
+
+    void clearLayers()
+    {
+        for (int i = 0; i < 4; i++)
+            for (int j = 0; j < 4; j++)
+                grid[i][j].layer = 0;
+    }
+
+    friend ostream& operator<< (ostream& stream, Bowl const& bowl);
+};
+
+ostream& operator<< (ostream& stream, Bowl const& bowl)
+{
+    for (int i = 0; i < 4; i++)
+    {
+        for (int j = 0; j < 4; j++)
+            stream << bowl.grid[i][j].letter << " ";
+        stream << endl;
+    }
+    stream << endl << endl;
+
+    return stream;
+}
+
+class Ingredients
+{
+public:
+    int number = 0;
+    vector<Word> words;
+    int letterNumber = 0;
+    int letterNumbers[26];
+
+    void addLetters()
+    {
+        letterNumber = 0;
+        for (int i = 0; i < 26; i++) letterNumber += letterNumbers[i];
+    }
+
+    void countLetters()
+    {
+        for (int i = 0; i < 26; i++) letterNumbers[i] = 0;
+
+        for (int i = 0; i < number; i++)
+        {
+            words[i].countLetters();
+            for (int j = 0; j < words[i].len; j++)
+            {
+                this->letterNumbers[(int)words[i].letters[j] - 'a'] = max(this->letterNumbers[(int)words[i].letters[j] - 'a'], words[i].letterNumbers[(int)words[i].letters[j] - 'a']);
+            }
+        }
+        addLetters();
+    }
+
+    bool empty()
+    {
+        return (number == 0);
+    }
+
+    void add(Word word)
+    {
+        this->words.push_back(word);
+        number++;
+        countLetters();
+    }
+
+    void erase(std::vector<Word>::const_iterator _Where)
+    {
+        this->words.erase(_Where);
+        number--;
+        countLetters();
+    }
+};
+
+void checkIfFits(Ingredients, int);
+void insertWord(Bowl, Ingredients, int);
+void insertLetter(Bowl, Ingredients, int, int, int, int, float);
+
+Ingredients inputWords;
+vector<Bowl> Salads;
+ 
+void checkIfFits(Ingredients ingredients, int index)
+{
+    ingredients.add(inputWords.words[index]);
+
+    if (ingredients.letterNumber <= 16) // if there's space for any other words
+    {
+        for (int i = index + 1; i < inputWords.number; i++)
+        {
+            checkIfFits(ingredients, i);
+        }
+    }
+
+    if (ingredients.number >= WORD_REQUIREMENT)
+    {
+        Bowl bowl;
+        insertWord(bowl, ingredients, 0);
+    }
+}
+
+void insertWord(Bowl bowl, Ingredients ingredients, int index)
+{
+    bowl.clearLayers(); // set layer to 0 for all previously added words
+
+    for (int i = 0; i < 4; i++)
+        for (int j = 0; j < 4; j++)
+            insertLetter(bowl, ingredients, index, 0, i, j, STRAIGHT_VALUE);
+}
+
+void insertLetter(Bowl bowl, Ingredients ingredients, int index, int jndex, int i, int j, float income)
+{
+    char currentLetter = ingredients.words[index].letters[jndex];
+
+    if (bowl.grid[i][j].letter == ' ' or (bowl.grid[i][j].letter == currentLetter and bowl.grid[i][j].layer == 0)) // if current spot is free or contains same letter from other words
+    {
+        bowl.grid[i][j].letter = currentLetter;
+        bowl.grid[i][j].layer = 1;
+
+        bowl.difficulty += income;
+
+        if (jndex + 1 == ingredients.words[index].len) // if is last letter
+        {
+            if (index + 1 == ingredients.number) // if is last word
+            {
+                Salads.push_back(bowl);
+                cout << bowl;
+                stopper++;
+
+                min_dif = min(min_dif, bowl.difficulty);
+                max_dif = max(max_dif, bowl.difficulty);
+                avr_dif = (avr_dif * (stopper - 1) + bowl.difficulty) / stopper;
+
+                if (stopper >= stop)
+                {
+                    cout << endl << "min_dif: " << min_dif << endl << "max_dif: " << max_dif << endl << "avr_dif: " << avr_dif << endl;
+                    exit(0);
+                }
+            }
+            else
+            {
+                insertWord(bowl, ingredients, index + 1); // insert next word
+            }
+        }
+        else // insert next letter
+        {
+            if (j > 0)
+            {
+                insertLetter(bowl, ingredients, index, jndex + 1, i, j - 1, STRAIGHT_VALUE);
+                if (i < 3)
+                {
+                    insertLetter(bowl, ingredients, index, jndex + 1, i + 1, j - 1, DIAGINAL_VALUE);
+                }
+            }
+            if (i < 3)
+            {
+                insertLetter(bowl, ingredients, index, jndex + 1, i + 1, j, STRAIGHT_VALUE);
+                if (j < 3)
+                {
+                    insertLetter(bowl, ingredients, index, jndex + 1, i + 1, j + 1, DIAGINAL_VALUE);
+                }
+            }
+            if (j < 3)
+            {
+                insertLetter(bowl, ingredients, index, jndex + 1, i, j + 1, STRAIGHT_VALUE);
+                if (i > 0)
+                {
+                    insertLetter(bowl, ingredients, index, jndex + 1, i - 1, j + 1, DIAGINAL_VALUE);
+                }
+            }
+            if (i > 0)
+            {
+                insertLetter(bowl, ingredients, index, jndex + 1, i - 1, j, STRAIGHT_VALUE);
+                if (j > 0)
+                {
+                    insertLetter(bowl, ingredients, index, jndex + 1, i - 1, j - 1, DIAGINAL_VALUE);
+                }
+            }
+        }
+    }
+}
+
+bool CheckSorted(Ingredients v)
+{
+    for (int i = 1; i < v.number; i++)
+        if (v.words[i].len < v.words[i - 1].len)
+            return 0;
+    return 1;
+}
+
+Ingredients Merge(Ingredients a, Ingredients b)
+{
+    Ingredients v;
+    while (!a.empty() or !b.empty())
+    {
+        if (!a.empty() and (b.empty() or a.words.front().len >= b.words.front().len))
+        {
+            v.add(a.words.front());
+            a.erase(a.words.begin());
+        }
+        else
+        {
+            v.add(b.words.front());
+            b.erase(b.words.begin());
+        }
+    }
+    return v;
+}
+
+void Sort(Ingredients& v)
+{
+    if (CheckSorted(v))
+        return;
+
+    Ingredients a, b;
+    for (int i = 0; i < v.number / 2; i++)
+        a.add(v.words[i]);
+    for (int i = v.number / 2; i < v.number; i++)
+        b.add(v.words[i]);
+
+    Sort(a);
+    Sort(b);
+
+    v = Merge(a, b);
+}
+
+int main()
+{
+    Word word;
+    do
+    {
+        cin >> word;
+        if (word.len >= 4 and word.len <= 16)
+        {
+            inputWords.add(word);
+        }
+    } while (word.letters != "0");
+
+    Sort(inputWords);
+
+    Ingredients ingredients;
+    for (int i = 0; i < inputWords.number; i++)
+    {
+        checkIfFits(ingredients, i);
+    }
+
+    cout << Salads.size();
+    return 0;
+}
