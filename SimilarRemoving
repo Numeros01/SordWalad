@@ -1,0 +1,474 @@
+#include <iostream>
+#include <vector>
+#include <set>
+#include <string>
+#include <algorithm>
+
+using namespace std;
+
+int WORD_REQUIREMENT = 4;
+
+int stopper = 0;
+int stop = 1000;
+
+float STRAIGHT_VALUE = 1.0f;
+float DIAGINAL_VALUE = 1.5f;
+
+float DIFFICULT_WORD_PART = 0.3f;
+
+float SIMILAR_WORD_PART = 0.6f;
+float SIMILAR_BOWL_PART = 0.6f;
+
+float min_dif = 1000.0f;
+float max_dif = 0.1f;
+float avr_dif = 0.1f;
+
+struct square
+{
+    char letter = ' ';
+    bool layer = 0;
+};
+
+enum Code {UL, Up, UR, Ri, DR, Do, DL, Le, Start};
+
+class Word
+{
+public:
+    string letters;
+    int len;
+    int letterNumbers[26];
+
+    float difficulty = 0.0f;
+    float min_dif = 0.0f;
+
+    vector<Code> code;
+
+    void countLetters()
+    {
+        for (int i = 0; i < 26; i++) letterNumbers[i] = 0;
+
+        for (int i = 0; i < len; i++)
+            letterNumbers[(int)letters[i] - 'a']++;
+    }
+
+    friend istream& operator>> (istream& stream, Word& word);
+};
+
+istream& operator>> (istream& stream, Word& word)
+{
+    string s;
+    stream >> s;
+    for (int i = 0; i < s.size(); i++) 
+        if (s[i] >= 'A' and s[i] <= 'Z') s[i] += 'a' - 'A';
+
+    word.letters = s;
+    word.len = word.letters.size();
+    word.countLetters();
+
+    word.min_dif = word.len + (word.len * DIFFICULT_WORD_PART * (DIAGINAL_VALUE - STRAIGHT_VALUE)); //
+
+    return stream;
+}
+
+class Ingredients
+{
+public:
+    int number = 0;
+    vector<Word> words;
+    int letterNumber = 0;
+    int letterNumbers[26];
+
+    void addLetters()
+    {
+        letterNumber = 0;
+        for (int i = 0; i < 26; i++) letterNumber += letterNumbers[i];
+    }
+
+    void countLetters()
+    {
+        for (int i = 0; i < 26; i++) letterNumbers[i] = 0;
+
+        for (int i = 0; i < number; i++)
+        {
+            words[i].countLetters();
+            for (int j = 0; j < words[i].len; j++)
+            {
+                this->letterNumbers[(int)words[i].letters[j] - 'a'] = max(this->letterNumbers[(int)words[i].letters[j] - 'a'], words[i].letterNumbers[(int)words[i].letters[j] - 'a']);
+            }
+        }
+        addLetters();
+    }
+
+    bool empty()
+    {
+        return (number == 0);
+    }
+
+    void add(Word word)
+    {
+        this->words.push_back(word);
+        number++;
+        countLetters();
+    }
+
+    void erase(std::vector<Word>::const_iterator _Where)
+    {
+        this->words.erase(_Where);
+        number--;
+        countLetters();
+    }
+};
+
+class Bowl
+{
+public:
+    square grid[4][4];
+    float difficulty = 0.0f;
+
+    Ingredients ingredients;
+
+    void clearLayers()
+    {
+        for (int i = 0; i < 4; i++)
+            for (int j = 0; j < 4; j++)
+                grid[i][j].layer = 0;
+    }
+
+    friend ostream& operator<< (ostream& stream, Bowl const& bowl);
+};
+
+ostream& operator<< (ostream& stream, Bowl const& bowl)
+{
+    for (int i = 0; i < 4; i++)
+    {
+        for (int j = 0; j < 4; j++)
+            stream << bowl.grid[i][j].letter << " ";
+        stream << endl;
+    }
+    stream << endl << endl;
+
+    return stream;
+}
+
+void checkIfFits(Ingredients, int);
+void makeSalad(Ingredients);
+void insertWord(Bowl, int);
+void insertLetter(Bowl, int, int, int, int, Code, float);
+void removeSimilar(vector<Bowl>&);
+
+Ingredients inputWords;
+vector<vector<Bowl>> Salads;
+ 
+void checkIfFits(Ingredients ingredients, int index)
+{
+    ingredients.add(inputWords.words[index]);
+
+    if (ingredients.letterNumber <= 16) // if there's space for any other words
+    {
+        for (int i = index + 1; i < inputWords.number; i++)
+        {
+            checkIfFits(ingredients, i);
+        }
+    }
+
+    if (ingredients.number >= WORD_REQUIREMENT)
+    {
+        makeSalad(ingredients);
+    }
+}
+
+void makeSalad(Ingredients ingredients)
+{
+    if (!Salads.empty())
+    {
+        removeSimilar(Salads.back());
+    }
+
+    vector<Bowl> temp;
+    Salads.push_back(temp);
+
+    Bowl bowl;
+    bowl.ingredients = ingredients;
+    insertWord(bowl, 0);
+}
+
+void insertWord(Bowl bowl, int wordIndex)
+{
+    bowl.clearLayers(); // set layer to 0 for all previously added words
+
+    vector<pair<int, int>> places;
+    vector<pair<int, int>> perfect_places;
+
+    for (int i = 0; i < 4; i++)
+        for (int j = 0; j < 4; j++)
+            places.push_back({ i, j });
+
+    if (places.empty())
+        return;
+
+    for (int k = 0; k < places.size(); k++)
+        if (bowl.grid[places[k].first][places[k].second].letter == bowl.ingredients.words[wordIndex].letters.front())
+        {
+            perfect_places.push_back({ places[k].first, places[k].second });
+            places.erase(places.begin() + k);
+            k--;
+        }
+
+    if (perfect_places.empty())
+    {
+        for (int k = 0; k < places.size(); k++)
+        {
+            int r = rand() % places.size();
+
+            insertLetter(bowl, wordIndex, 0, places[r].first, places[r].second, Start, STRAIGHT_VALUE); // pick random cell and remove for later
+            places.erase(places.begin() + r);
+        }
+    }
+    else
+    {
+        for (int k = 0; k < perfect_places.size(); k++)
+        {
+            int r = rand() % perfect_places.size();
+
+            insertLetter(bowl, wordIndex, 0, perfect_places[r].first, perfect_places[r].second, Start, STRAIGHT_VALUE); // pick random cell and remove for later
+            perfect_places.erase(perfect_places.begin() + r);
+        }
+    }
+}
+
+void insertLetter(Bowl bowl, int wordIndex, int letterIndex, int i, int j, Code code, float income)
+{
+    char currentLetter = bowl.ingredients.words[wordIndex].letters[letterIndex];
+
+    if (code != Start)
+        bowl.ingredients.words[wordIndex].code.push_back(code);
+
+    if (bowl.grid[i][j].letter == ' ' or (bowl.grid[i][j].letter == currentLetter and bowl.grid[i][j].layer == 0)) // if current spot is free or contains same letter from other words
+    {
+        bowl.grid[i][j].letter = currentLetter;
+        bowl.grid[i][j].layer = 1;
+
+        bowl.difficulty += income;
+        bowl.ingredients.words[wordIndex].difficulty += income;
+
+        if (letterIndex + 1 == bowl.ingredients.words[wordIndex].len) // if is last letter
+        {
+            if (bowl.ingredients.words[wordIndex].difficulty >= bowl.ingredients.words[wordIndex].min_dif)
+            {
+                if (wordIndex + 1 == bowl.ingredients.number) // if is last word
+                {
+                    Salads.back().push_back(bowl);
+                    cout << bowl;
+
+                    WORD_REQUIREMENT = max(WORD_REQUIREMENT, bowl.ingredients.number);
+
+                    stopper++;
+
+                    min_dif = min(min_dif, bowl.difficulty);
+                    max_dif = max(max_dif, bowl.difficulty);
+                    avr_dif = (avr_dif * (stopper - 1) + bowl.difficulty) / stopper;
+
+                    if (stopper >= stop)
+                    {
+                        cout << endl << "min_dif: " << min_dif << endl << "max_dif: " << max_dif << endl << "avr_dif: " << avr_dif << endl;
+                        exit(0);
+                    }
+                }
+                else
+                {
+                    insertWord(bowl, wordIndex + 1); // insert next word
+                }
+            }
+        }
+        else // insert next letter
+        {
+            struct place { int x, y; Code code; float income; };
+
+            vector<place> places;
+            vector<place> perfect_places;
+
+            if (j > 0)
+            {
+                places.push_back({i, j - 1, Le, STRAIGHT_VALUE});
+                if (i < 3)
+                {
+                    places.push_back({ i + 1, j - 1, DL, DIAGINAL_VALUE});
+                }
+            }
+            if (i < 3)
+            {
+                places.push_back({ i + 1, j, Do, STRAIGHT_VALUE});
+                if (j < 3)
+                {
+                    places.push_back({ i + 1, j + 1, DR, DIAGINAL_VALUE});
+                }
+            }
+            if (j < 3)
+            {
+                places.push_back({ i, j + 1, Ri, STRAIGHT_VALUE});
+                if (i > 0)
+                {
+                    places.push_back({ i - 1, j + 1, UR, DIAGINAL_VALUE});
+                }
+            }
+            if (i > 0)
+            {
+                places.push_back({ i - 1, j, Up, STRAIGHT_VALUE});
+                if (j > 0)
+                {
+                    places.push_back({ i - 1, j - 1, UL, DIAGINAL_VALUE});
+                }
+            }
+
+            if (places.empty()) 
+                return;
+
+
+            if (perfect_places.empty())
+            {
+                for (int k = 0; k < places.size(); k++)
+                {
+                    int r = rand() % places.size();
+
+                    insertLetter(bowl, wordIndex, letterIndex + 1, places[r].x, places[r].y, places[r].code, places[r].income); // pick random cell and remove for later
+                    places.erase(places.begin() + r);
+                }
+            }
+            else
+            {
+                for (int k = 0; k < perfect_places.size(); k++)
+                {
+                    int r = rand() % perfect_places.size();
+
+                    insertLetter(bowl, wordIndex, letterIndex + 1, perfect_places[r].x, perfect_places[r].y, perfect_places[r].code, perfect_places[r].income); // pick random cell and remove for later
+                    perfect_places.erase(perfect_places.begin() + r);
+                }
+            }
+        }
+    }
+}
+
+void removeSimilar(vector<Bowl>& salads)
+{
+    for (int i = 0; i < salads.size(); i++) // salad a
+    {
+        for (int j = i + 1; j < salads.size(); j++) // salad b
+        {
+            if (salads[i].ingredients.number != salads[j].ingredients.number)
+            {
+                continue;
+            }
+
+            int similar_words;
+            int similar_codes;
+            
+            for (int l = 0; l < 8; l++) // directions
+            {
+                similar_words = 0;
+
+                for (int k = 0; k < salads[i].ingredients.number; k++) // words
+                {
+                    similar_codes = 0;
+
+                    for (int m = 0; m < salads[i].ingredients.words[k].code.size(); m++) // codes
+                    {
+                        if (salads[i].ingredients.words[k].code[m] == (salads[j].ingredients.words[k].code[m] + l) % 8)
+                        {
+                            similar_codes++;
+                        }
+                    }
+
+                    if (similar_codes >= (float)salads[i].ingredients.words[k].code.size() * SIMILAR_WORD_PART)
+                    {
+                        similar_words++;
+                    }
+                }
+
+                if (similar_words >= (float)salads[i].ingredients.number * SIMILAR_BOWL_PART) // if two salads are too similar
+                {
+                    int removed_salad_place = j;
+
+                    if (salads[i].difficulty < salads[j].difficulty)
+                    {
+                        swap(salads[i], salads[j]);
+                        i--;
+                        j = salads.size() + 100000000; // start checking again from (better salad in place of worse)
+                    }
+
+                    salads.erase(salads.begin() + removed_salad_place);
+                    break;
+                }
+            }
+        }
+    }
+}
+
+bool CheckSorted(Ingredients v)
+{
+    for (int i = 1; i < v.number; i++)
+        if (v.words[i].len > v.words[i - 1].len)
+            return 0;
+    return 1;
+}
+
+Ingredients Merge(Ingredients a, Ingredients b)
+{
+    Ingredients v;
+    while (!a.empty() or !b.empty())
+    {
+        if (!a.empty() and (b.empty() or a.words.front().len >= b.words.front().len))
+        {
+            v.add(a.words.front());
+            a.erase(a.words.begin());
+        }
+        else
+        {
+            v.add(b.words.front());
+            b.erase(b.words.begin());
+        }
+    }
+    return v;
+}
+
+void Sort(Ingredients& v)
+{
+    if (CheckSorted(v))
+        return;
+
+    Ingredients a, b;
+    for (int i = 0; i < v.number / 2; i++)
+        a.add(v.words[i]);
+    for (int i = v.number / 2; i < v.number; i++)
+        b.add(v.words[i]);
+
+    Sort(a);
+    Sort(b);
+
+    v = Merge(a, b);
+}
+
+int main()
+{
+    srand(time(0));
+
+    Word word;
+    do
+    {
+        cin >> word;
+        if (word.len >= 4 and word.len <= 16)
+        {
+            inputWords.add(word);
+        }
+    } while (word.letters != "0");
+
+    Sort(inputWords);
+
+    Ingredients ingredients;
+    for (int i = 0; i < inputWords.number; i++)
+    {
+        checkIfFits(ingredients, i);
+    }
+
+    cout << Salads.size();
+    return 0;
+}
