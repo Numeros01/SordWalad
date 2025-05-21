@@ -1,0 +1,855 @@
+import copy
+
+WORD_REQUIREMENT = 5
+MAX_SALAD_NUM = 1
+
+global addNewSalads
+global max_reps
+global dif_pass, dif_fail
+global mp_pass, mp_fail
+addNewSalads = True
+max_reps = 0
+dif_pass, dif_fail = 0, 0
+mp_pass, mp_fail = 0, 0
+
+EMPTY = '.'
+
+STRAIGHT_VALUE = 1.0
+DIAGONAL_VALUE = 1.5
+
+DIFFICULT_WORD_PART = 0.3
+
+SIMILAR_WORD_PART = 0.6
+SIMILAR_BOWL_PART = 0.6
+
+NOTHING = 87568979
+UP_LEFT = 0
+UP = 1
+UP_RIGHT = 2
+RIGHT = 3
+DOWN_RIGHT = 4
+DOWN = 5
+DOWN_LEFT = 6
+LEFT = 7
+
+
+def invertCode(x):
+    match x:
+        case 0: return 4
+        case 1: return 5
+        case 2: return 6
+        case 3: return 7
+        case 4: return 0
+        case 5: return 1
+        case 6: return 2
+        case 7: return 3
+        case _: return NOTHING
+
+def calculateIncome(x):
+    if x % 2 == 0:
+        return DIAGONAL_VALUE
+    else:
+        return STRAIGHT_VALUE
+
+
+
+class Place:
+    def __init__(self, x = 0, y = 0, cod = NOTHING, inc = 0.0):
+        self.x = x
+        self.y = y
+        self.code = cod
+        self.income = inc
+
+    def __str__(self):
+        return f"x: {self.x}, y: {self.y}, code: {self.code}, inc: {self.income}"
+
+
+class Square:
+    def __init__(self, x: int, y: int):
+        self.x = x
+        self.y = y
+        self.letter = EMPTY
+        self.layer = 0
+        self.uses = 0
+        self.cons = []
+
+    def __eq__(self, other):
+        if(self.x == other.x and self.y == other.y):
+            return True
+        else:
+            return False
+
+    def __str__(self):
+        return f"x: {self.x} y: {self.y} letter: {self.letter}"
+
+    def findCon(self, other):
+        for i in self.cons:
+            if i == other:
+                return i
+        return Connection(-1, -1, NOTHING, 0.0)
+
+
+class Connection:
+    def __init__(self, x, y, cod, inc):
+        self.x = x
+        self.y = y
+        self.code = cod
+        self.income = inc
+
+    def __str__(self):
+        return f"x:{self.x} y:{self.y}, code:{self.code}"
+
+
+class Path:
+    def __init__(self):
+        self.path = []
+        self.len = 0
+
+    def add(self, sq: Square):
+        self.path.append(sq)
+        self.len += 1
+
+class Word:
+
+    def __init__(self, word):
+        self.letters = copy.deepcopy(word)
+        self.len = len(word)
+        self.difficulty = 0.0
+        self.min_diff = ((self.len - 1) * STRAIGHT_VALUE) + ((self.len - 1) * DIFFICULT_WORD_PART * (DIAGONAL_VALUE - STRAIGHT_VALUE))
+        self.letterNumbers = [0]*26
+
+        self.countLetters()
+
+        self.code = [NOTHING] * self.len
+        self.paths = []
+        self.pathNumber = 0
+
+    def __str__(self):
+        return self.letters
+
+    def countLetters(self):
+        self.letterNumbers = [0]*26
+
+        for i in self.letters:
+            self.letterNumbers[ord(i) - ord('a')] += 1
+
+    def cout(self):
+        print("word: ", self, self.len)
+        print(self.letterNumbers)
+        print("\n")
+
+
+class Tweak:
+    def __init__(self, a: Square, b: Square, w: Word):
+        self.a = a
+        self.b = b
+        self.word = w
+
+class Ingredients:
+
+    def __init__(self):
+        self.number = 0
+        self.words = []
+        self.letterNumber = 0
+        self.letterNumbers = [0] * 26
+
+    def addLetters(self):
+        self.letterNumber = 0
+        for i in self.letterNumbers:
+            self.letterNumber += i
+
+    def countLetters(self):
+        self.letterNumbers = [0]*26
+
+        for i in self.words:
+            i.countLetters()
+
+            for j in i.letters:
+                inx = ord(j) - ord('a')
+                self.letterNumbers[inx] = max(self.letterNumbers[inx], i.letterNumbers[inx])
+
+        self.addLetters()
+
+    def empty(self):
+        return (self.number == 0)
+
+    def add(self, word):
+        self.words.append(copy.deepcopy(word))
+        self.number += 1
+        self.countLetters()
+
+    def pop(self, where):
+        self.words.pop(where)
+        self.number -= 1
+        self.countLetters()
+
+    def assign(self, ing):
+        self.words = ing.words
+        self.number = ing.number
+        self.countLetters()
+
+    def cout(self):
+        for i in self.words:
+            print(i)
+        # print("letters: ", self.letterNumber, self.letterNumbers, "\n")
+        print("\n")
+
+
+class Bowl:
+    
+    def __init__(self, ing: Ingredients):
+        self.grid = []
+
+        for i in range(4):
+            self.grid.append([])
+            for j in range(4):
+                self.grid[-1].append(Square(i, j))
+
+        for i in range(4):
+            for j in range(4):
+
+                if j > 0:
+                    self.grid[i][j].cons.append(Connection(i, j - 1, LEFT, STRAIGHT_VALUE))
+                    if i<3:
+                        self.grid[i][j].cons.append(Connection(i+1, j-1, DOWN_LEFT, DIAGONAL_VALUE))
+
+                if i<3:
+                    self.grid[i][j].cons.append(Connection(i+1, j, DOWN, STRAIGHT_VALUE))
+                    if j<3:
+                        self.grid[i][j].cons.append(Connection(i+1, j+1, DOWN_RIGHT, DIAGONAL_VALUE))
+
+                if j<3:
+                    self.grid[i][j].cons.append(Connection(i, j+1, RIGHT, STRAIGHT_VALUE))
+                    if i>0:
+                        self.grid[i][j].cons.append(Connection(i-1, j+1, UP_RIGHT, DIAGONAL_VALUE))
+
+                if i>0:
+                    self.grid[i][j].cons.append(Connection(i-1, j, UP, STRAIGHT_VALUE))
+                    if j>0:
+                        self.grid[i][j].cons.append(Connection(i-1, j-1, UP_LEFT, DIAGONAL_VALUE))
+
+        self.ingredients = copy.deepcopy(ing)
+
+        self.tweaks = []
+
+        self.difficulty = 0.0
+
+    def clearLayers(self):
+        for i in self.grid:
+            for j in i:
+                j.layer = 0
+                
+    def clearUses(self):
+        for i in self.grid:
+            for j in i:
+                j.uses = 0
+
+    def findPaths(self, word: Word):
+
+        # print("finding paths for", word)
+
+        for inx, row in enumerate(self.grid):
+            for jnx, sq in enumerate(row):
+                if sq.letter == word.letters[0]: # if grid cell contains first letter of word
+
+                    # print("\tfirst letter ("+word.letters[0]+") found at", inx, jnx)
+
+                    temp = Path()
+                    self.recFindPaths(word, temp, Square(inx, jnx), [])
+
+    def recFindPaths(self, word: Word, currentPath: Path, p: Square, usedSquares):
+
+        currentPath.add(p)
+        usedSquares.append(p)
+
+        if currentPath.len == word.len:
+
+            # print("\tadding path...")
+
+            word.paths.append(currentPath)
+            word.pathNumber += 1
+        else:
+            for i in range(p.x - 1, p.x + 2):
+                for j in range(p.y - 1, p.y + 2): # 3x3 grid around
+                    if i>=0 and j>=0 and i<4 and j<4: # if not exceeding borders
+                        if i != p.x or j != p.y: # if isn't same square
+
+                            if self.grid[i][j].letter == word.letters[currentPath.len]: # if cell contains THAT letter
+
+                                alreadyUsed = False
+                                for pSq in usedSquares:
+                                    if pSq == self.grid[i][j]:
+                                        alreadyUsed = True
+
+                                if alreadyUsed == False: # if the cell hasn't been used previously
+
+                                    # print("\tnext letter ("+word.letters[currentPath.len]+") found at", i, j)
+                                   
+                                    self.recFindPaths(word, copy.deepcopy(currentPath), Square(i, j), copy.deepcopy(usedSquares))
+
+    def followPath(self, path: Path):
+        self.clearUses()
+
+        for i in path.path:
+            self.grid[i.x][i.y].uses += 1
+
+    def comparePaths(self, a: Path, b: Path, word: Word):
+
+        # print("comparing", word, "paths...")
+
+        if a.len != b.len:
+            return False
+
+        for inx, aSq in enumerate(a.path):
+            bSq = b.path[inx]
+
+            if aSq == bSq:
+                self.grid[aSq.x][aSq.y].uses += 1
+
+                # print("\tsame")
+
+            else:
+                if self.grid[aSq.x][aSq.y].uses == 0 or self.grid[bSq.x][bSq.y].uses == 0:
+
+                    # print("\t0 uses :-(")
+
+                    return False
+                else:
+
+                    # print("\tsome uses - tweak applied")
+
+                    self.grid[aSq.x][aSq.y].uses += 1
+                    self.grid[bSq.x][bSq.y].uses += 1
+                    self.tweaks.append(Tweak(aSq, bSq, word))
+        return True
+
+    def checkMultiplePaths(self):
+
+        # self.cout()
+
+        multipathWords = []
+
+        for word in self.ingredients.words:
+            self.findPaths(word)
+            match word.pathNumber:
+                case 0:
+
+                    # print("0 paths for word", word)
+
+                    return False
+                case 1:
+
+                    # print("word:", word, "has one path")
+
+                    self.followPath(word.paths[0])
+                case _:
+
+                    # print("word:", word, "has multiple paths:", word.pathNumber)
+
+                    multipathWords.append(word)
+
+        for mpword in multipathWords:
+            for inx, patha in enumerate(mpword.paths):
+                for jnx in range(inx + 1, mpword.pathNumber):
+                    if self.comparePaths(patha, mpword.paths[jnx], mpword) == False:
+                        return False
+        return True
+
+
+    def cout(self, tab = 0):
+        rows = []
+        for sq4 in self.grid:
+            rows.append("[")
+            for sq in sq4:
+                rows[-1] += ' ' + sq.letter
+
+        for i in rows:
+            print("\t"*tab + i +']')
+        print("\n")
+
+class SaladSet:
+
+    def __init__(self, ing):
+        self.ingredients = copy.deepcopy(ing)
+        self.number = 0
+        self.salads = []
+    
+    def add(self, bowl):
+        self.salads.append(copy.deepcopy(bowl))
+        self.number += 1
+
+    def empty(self):
+        return True if self.number == 0 else False
+
+    def pop(self, where):
+        self.salads.pop(where)
+        self.number -= 1
+
+    def swap(self, i, j):
+        self.salads[i], self.salads[j] = self.salads[j], self.salads[i]
+
+    def assign(self, ss):
+        self.ingredients = ss.ingredients
+        self.salads = ss.salads
+        self.number = ss.number
+
+
+class Cart:
+    
+    def __init__(self, bowl: Bowl, wi, li, i, j, cod, i_n, esq: Square, enx):
+
+        self.bowl = bowl
+        self.wordIndex = wi
+        self.letterIndex = li
+        self.x, self.y = i, j
+        self.code = cod
+        self.insert_now = i_n
+        self.end_sq = esq
+        self.end_inx =  enx
+
+
+# make cursor invisible
+print("\x1b[?25l")
+
+Salads = []
+Queue = []
+tempcheckiffitslist = []
+
+def checkIfFits(ingredients, wordSet, index):
+
+    # print("CheckIfFits: Ingredients:\n")
+
+    ingredients.add(wordSet[index])
+
+    # ingredients.cout()
+
+    if ingredients.letterNumber > 16:
+        return
+
+    for i in range(index+1, len(wordSet)):
+        checkIfFits(copy.deepcopy(ingredients), wordSet, i)
+
+    if ingredients.number >= WORD_REQUIREMENT:
+        tempcheckiffitslist.append(copy.deepcopy(ingredients))
+
+
+def makeSalad(ingredients: Ingredients):
+
+    # print("MakeSalad: Ingredients:\n")
+    # ingredients.cout()
+
+    if len(Salads) > 0:
+        removeSimilar(Salads[-1])
+        sortSS(Salads[-1])
+
+    Salads.append(SaladSet(ingredients))
+
+    global addNewSalads
+    global dif_pass, dif_fail
+    addNewSalads = True
+    dif_pass, dif_fail = 0, 0
+
+    insertWord(Bowl(ingredients), 0)
+
+    print("\nIngredients:")
+    ingredients.cout()
+    print("Generated Salad Number:", Salads[-1].number)
+
+    if Salads[-1].number >= 1: 
+        print("first salad:")
+        Salads[-1].salads[0].cout()
+
+
+
+
+def insertWord(bowl: Bowl, wordIndex):
+
+    global addNewSalads#, max_reps
+
+    # max_reps += 1
+    # if max_reps > 20:
+    #     exit(1)
+
+    if addNewSalads == False:
+        return
+
+    current_word = bowl.ingredients.words[wordIndex]
+
+    print("InsertWord:", current_word, current_word.len)
+    # print("\x1b[2J")
+    # print("\x1b[H")
+
+    bowl.cout()
+
+    # print("word difficulty pass: ", dif_pass, '/', dif_fail)
+    # print("multiple paths pass: ", mp_pass, '/', mp_fail)
+
+    bowl.clearLayers()
+
+
+    # print("letter occurances:")
+
+    occured = False
+    for l in range(current_word.len):
+
+        for row in bowl.grid:
+            for sq in row:
+
+                if sq.letter == current_word.letters[l]:
+
+                    print("\tletter(" + sq.letter + ") found at x:", sq.x, "y:", sq.y)
+
+                    occured = True
+                    Queue.append(Cart(copy.deepcopy(bowl), wordIndex, l, sq.x, sq.y, NOTHING, None, sq, l))
+
+    if occured == False:
+        for row in bowl.grid:
+            for sq in row:
+                Queue.append(Cart(copy.deepcopy(bowl), wordIndex, 0, sq.x, sq.y, NOTHING, True, None, None))
+
+
+
+    while len(Queue) > 0:
+        i = Queue[0]
+        if i.end_inx == None:
+            insertLetterAfter(copy.deepcopy(i.bowl), i.wordIndex, i.letterIndex, i.x, i.y, i.code, i.insert_now)
+        else:
+            insertLetterBefore(copy.deepcopy(i.bowl), i.wordIndex, i.letterIndex, i.x, i.y, i.code, i.end_sq, i.end_inx)
+        Queue.pop(0)
+
+
+
+
+
+def insertLetterBefore(bowl: Bowl, wordIndex, letterIndex, i, j, code, end_sq: Square, end_inx):
+
+    currentLetter = bowl.ingredients.words[wordIndex].letters[letterIndex]
+
+    print("InsertLetterBefore:", currentLetter, "x:", i, "y:", j)
+
+    if bowl.grid[i][j].letter == EMPTY or (bowl.grid[i][j].letter == currentLetter and bowl.grid[i][j].layer == 0):
+
+        # print("inserting...")
+
+        bowl.grid[i][j].letter = currentLetter
+        bowl.grid[i][j].layer = 1
+
+        if code != NOTHING:
+
+            bowl.ingredients.words[wordIndex].code[letterIndex] = invertCode(code)
+            bowl.ingredients.words[wordIndex].difficulty += calculateIncome(code)
+            bowl.difficulty += calculateIncome(code)
+
+        if letterIndex == 0: # if this was first letter
+
+            # print("first letter...")
+
+            bowl.grid[end_sq.x][end_sq.y].layer = 0
+            Queue.append(Cart(copy.deepcopy(bowl), wordIndex, end_inx, end_sq.x, end_sq.y, NOTHING, False, None, None))
+
+        else:
+
+            same_letter_found = False
+
+            for k in bowl.grid[i][j].cons:
+                if bowl.grid[k.x][k.y].layer == 0 and bowl.grid[k.x][k.y].letter == bowl.ingredients.words[wordIndex].letters[letterIndex - 1]: # grid cell with same letter as previous in word
+                    same_letter_found = True
+                    Queue.append(Cart(copy.deepcopy(bowl), wordIndex, letterIndex - 1, k.x, k.y, k.code, None, end_sq, end_inx))
+                    
+
+            if same_letter_found == False:
+                for k in bowl.grid[i][j].cons:
+                    Queue.append(Cart(copy.deepcopy(bowl), wordIndex, letterIndex - 1, k.x, k.y, k.code, None, end_sq, end_inx))
+
+    else:
+
+        # print("cannot insert...")
+
+        pass
+
+                
+
+def insertLetterAfter(bowl, wordIndex, letterIndex, i, j, code, insert_now = True):
+
+    global addNewSalads, max_reps
+    if addNewSalads == False:
+        return
+
+    max_reps += 1
+    # if max_reps > 2000:
+    #     exit(0)
+
+    currentLetter = bowl.ingredients.words[wordIndex].letters[letterIndex]
+
+    print("InsertLetterAfter:", currentLetter, "\ti:", i, "j:", j)
+
+    if bowl.grid[i][j].letter == EMPTY or ( bowl.grid[i][j].letter == currentLetter and bowl.grid[i][j].layer == 0): # if this tile is empty or contains same letter from different word
+
+        if insert_now:
+
+            # print("\tinserting...")
+
+            bowl.grid[i][j].letter = currentLetter
+            bowl.grid[i][j].layer = 1
+
+            if code != NOTHING:
+
+                bowl.ingredients.words[wordIndex].code[letterIndex - 1] = code;
+                bowl.ingredients.words[wordIndex].difficulty += calculateIncome(code)
+                bowl.difficulty += calculateIncome(code)
+
+        # bowl.cout(1)
+
+        if letterIndex + 1 == bowl.ingredients.words[wordIndex].len: # if this was last letter
+
+            # print("\tlast letter...")
+
+            # print("difficulty:", bowl.ingredients.words[wordIndex].difficulty, "/", bowl.ingredients.words[wordIndex].min_diff)
+
+            if bowl.ingredients.words[wordIndex].difficulty >= bowl.ingredients.words[wordIndex].min_diff: # if word is difficult enough
+
+                # print("\tdifficulty passed...")
+
+                global dif_pass
+                dif_pass += 1
+
+                if wordIndex + 1 == bowl.ingredients.number: # if this was last word
+
+                    # print("\tlast word...")
+
+                    if bowl.checkMultiplePaths():
+
+                        global mp_pass
+                        mp_pass += 1
+
+                        if addNewSalads == True:
+
+                            Salads[-1].add(copy.deepcopy(bowl))
+                        
+                            # print("adding bowl:")
+                            # bowl.cout()
+
+                            if Salads[-1].number >= MAX_SALAD_NUM:
+                                addNewSalads = False
+                                return
+                        
+                    else:
+
+                        # print("multiple paths failed...")
+
+                        global mp_fail
+                        mp_fail += 1
+
+                        pass
+
+                else:
+                    insertWord(copy.deepcopy(bowl), wordIndex + 1)
+
+            else:
+
+                global dif_fail
+                dif_fail += 1
+
+                pass
+
+        else:
+
+            # print("next letter...")
+
+            # print("connections:")
+
+            same_letter_found = False
+
+            for k in bowl.grid[i][j].cons:
+
+                # print(k)
+
+                if bowl.grid[k.x][k.y].layer == 0 and bowl.grid[k.x][k.y].letter == bowl.ingredients.words[wordIndex].letters[letterIndex + 1]: # grid cell with same letter as next in word
+                    same_letter_found = True
+                    Queue.append(Cart(copy.deepcopy(bowl), wordIndex, letterIndex + 1, k.x, k.y, k.code, True, None, None))
+
+
+            if same_letter_found == False:
+                for k in bowl.grid[i][j].cons:
+                    Queue.append(Cart(copy.deepcopy(bowl), wordIndex, letterIndex + 1, k.x, k.y, k.code, True, None, None))
+
+    else:
+
+        # print("cannot insert...")
+
+        pass
+
+def removeSimilar(saladset: SaladSet):
+
+    # print(f"RemoveSimilar:\n\tSalads[{Salads.index(saladset)}]:")
+    # for i in saladset.salads:
+    #     i.cout(2)
+
+    i = 0
+    j = 0
+    pause_outer_loop = False
+    pause_inner_loop = False
+
+    while i < saladset.number:
+
+        j = i + 1
+        continue_inner_loop = True
+        while j < saladset.number and continue_inner_loop == True:
+
+            # print("\t\tcomparing", i, "with", j)
+
+            if saladset.salads[i].ingredients.number != saladset.salads[j].ingredients.number:
+                j += 1
+                continue
+
+            for l in range(8): # for each direction
+                similar_words = 0
+
+                for k in range(saladset.salads[i].ingredients.number): # for each word
+                    similar_codes = 0
+
+                    for m in range(len(saladset.salads[i].ingredients.words[k].code)): # for each part of code 
+
+                        if saladset.salads[i].ingredients.words[k].code[m] == ((saladset.salads[j].ingredients.words[k].code[m]) + l) % 8: # if code looks same after rotation
+                            similar_codes+=1
+
+                    if similar_codes >= len(saladset.salads[i].ingredients.words[k].code) * SIMILAR_WORD_PART: # if many codes looked same
+                        similar_words+=1
+
+                if similar_words >= saladset.salads[i].ingredients.number * SIMILAR_BOWL_PART: # if many words looked same
+
+                    # print("\t\ttoo similar...")
+
+                    if saladset.salads[i].difficulty >= saladset.salads[j].difficulty:
+
+                        # print("\t\t\tdeleting", j)
+
+                        saladset.pop(j)
+                        continue_inner_loop = True
+                        pause_inner_loop = True
+                        pause_outer_loop = False
+                        break
+                    else:
+
+                        # print("\t\t\tdeleting", i)
+
+                        saladset.swap(i, j)
+                        saladset.pop(j)
+                        continue_inner_loop = False
+                        #pause_inner_loop = False
+                        pause_outer_loop = True
+                        break
+
+            if pause_inner_loop == False:
+                j += 1
+            pause_inner_loop = False
+
+        if pause_outer_loop == False: 
+            i += 1
+        pause_outer_loop = False
+
+
+
+
+def checkIngSorted(v: Ingredients):
+    for i in range(1, v.number):
+        if v.words[i].len > v.words[i-1].len:
+            return False
+    return True
+
+
+def checkSSSorted(ss: SaladSet):
+    for i in range(1, ss.number):
+        if ss.salads[i].difficulty > ss.salads[i-1].difficulty:
+            return False
+    return True
+
+
+
+def mergeIng(va, vb):
+    vv = Ingredients()
+    while not (va.empty() and vb.empty()):
+        if (not va.empty()) and (vb.empty() or va.words[0].len >= vb.words[0].len):
+            vv.add(va.words[0])
+            va.pop(0)
+        else:
+            vv.add(vb.words[0])
+            vb.pop(0)
+    return vv
+
+def mergeSS(sa, sb):
+    ss = SaladSet(sa.ingredients)
+    while not (sa.empty() and sb.empty()):
+        if (not sa.empty()) and (sb.empty() or sa.salads[0].difficulty >= sb.salads[0].difficulty):
+            ss.add(sa.salads[0])
+            sa.pop(0)
+        else:
+            ss.add(sb.salads[0])
+            sb.pop(0)
+    return ss
+
+
+
+def sortIng(v: Ingredients):
+    if checkIngSorted(v) == True:
+        return
+    va, vb = Ingredients(), Ingredients()
+    for i in range(0, v.number//2):
+        va.add(v.words[i])
+    for i in range(v.number//2, v.number):
+        vb.add(v.words[i])
+
+    sortIng(va)
+    sortIng(vb)
+
+    v.assign(mergeIng(copy.deepcopy(va), copy.deepcopy(vb)))
+
+def sortSS(s: SaladSet):
+    if checkSSSorted(s) == True:
+        return
+
+    sa, sb = SaladSet(s.ingredients), SaladSet(s.ingredients)
+    for i in range(0, s.number//2):
+        sa.add(s.salads[i])
+    for i in range(s.number//2, s.number):
+        sb.add(s.salads[i])
+
+    sortSS(sa)
+    sortSS(sb)
+
+    s.assign(mergeSS(sa, sb))
+
+
+
+
+
+
+inputWord = "Start"
+inputWords = Ingredients()
+
+while(inputWord != '0'):
+    inputWord = str(input())
+    if 4 <= len(inputWord) <= 16:
+        inputWords.add(Word(inputWord))
+
+print("\n\n")
+
+sortIng(inputWords)
+
+temp = Ingredients()
+for i in range(inputWords.number):
+    checkIfFits(copy.deepcopy(temp), inputWords.words, i)
+
+
+###################################
+for i in tempcheckiffitslist[::1]:
+    makeSalad(copy.deepcopy(i))
+###################################
+
+print("Total different sets:", len(Salads), "\n\n")
+
+# for i in Salads:
+#     i.ingredients.cout()
+#     print("best salad:")
+#     i.salads[0].cout()
+#     print("total salads generated:", i.number, "\n\n")
