@@ -7,10 +7,12 @@ global addNewSalads
 # global max_reps
 global dif_pass, dif_fail
 global mp_pass, mp_fail
+global cn_pass, cn_fail
 addNewSalads = True
 # max_reps = 0
 dif_pass, dif_fail = 0, 0
 mp_pass, mp_fail = 0, 0
+cn_pass, cn_fail = 0, 0
 
 EMPTY = '.'
 
@@ -71,6 +73,8 @@ class Square:
         self.letter = EMPTY
         self.layer = 0
         self.uses = 0
+
+        self.con_num = 0
         self.cons = []
 
     def __eq__(self, other):
@@ -79,14 +83,18 @@ class Square:
         else:
             return False
 
-    def __str__(self):
-        return f"x: {self.x} y: {self.y} letter: {self.letter}"
+    def add_con(self, con):
+        self.cons.append(con)
+        self.con_num += 1
 
     def findCon(self, other):
         for i in self.cons:
             if i == other:
                 return i
         return Connection(-1, -1, NOTHING, 0.0)
+
+    def __str__(self):
+        return f"x: {self.x} y: {self.y} letter: {self.letter}"
 
 
 class Connection:
@@ -109,6 +117,17 @@ class Path:
         self.path.append(sq)
         self.len += 1
 
+
+class L_Num:
+    def __init__(self, n = 0, k = 0):
+        self.num = n
+        self.req = k # number of letters that must connect
+
+    def max(self, x):
+        self.num = max(self.num, x)
+
+
+
 class Word:
 
     def __init__(self, word):
@@ -120,7 +139,7 @@ class Word:
 
         self.countLetters()
 
-        self.code = [NOTHING] * self.len
+        self.code = [NOTHING] * (self.len - 1)
         self.paths = []
         self.pathNumber = 0
 
@@ -145,30 +164,39 @@ class Tweak:
         self.b = b
         self.word = w
 
+
 class Ingredients:
 
     def __init__(self):
         self.number = 0
         self.words = []
         self.letterNumber = 0
-        self.letterNumbers = [0] * 26
+        self.letterNumbers = []
 
     def addLetters(self):
         self.letterNumber = 0
         for i in self.letterNumbers:
-            self.letterNumber += i
+            self.letterNumber += i.num
 
     def countLetters(self):
-        self.letterNumbers = [0]*26
+        self.letterNumbers = []
+        for i in range(26): self.letterNumbers.append(L_Num())
 
-        for i in self.words:
-            i.countLetters()
+        for w in self.words:
+            w.countLetters()
 
-            for j in i.letters:
-                inx = ord(j) - ord('a')
-                self.letterNumbers[inx] = max(self.letterNumbers[inx], i.letterNumbers[inx])
+            for l in range(w.len):
+                inx = ord(w.letters[l]) - ord('a')
+
+                self.letterNumbers[inx].max(w.letterNumbers[inx])
+                if l == 0 or l +1 == w.len:
+                    self.letterNumbers[inx].req += 1
+                else:
+                    self.letterNumbers[inx].req += 2
 
         self.addLetters()
+
+
 
     def empty(self):
         return (self.number == 0)
@@ -209,24 +237,24 @@ class Bowl:
             for j in range(4):
 
                 if j > 0:
-                    self.grid[i][j].cons.append(Connection(i, j - 1, LEFT, STRAIGHT_VALUE))
+                    self.grid[i][j].add_con(Connection(i, j - 1, LEFT, STRAIGHT_VALUE))
                     if i<3:
-                        self.grid[i][j].cons.append(Connection(i+1, j-1, DOWN_LEFT, DIAGONAL_VALUE))
+                        self.grid[i][j].add_con(Connection(i+1, j-1, DOWN_LEFT, DIAGONAL_VALUE))
 
                 if i<3:
-                    self.grid[i][j].cons.append(Connection(i+1, j, DOWN, STRAIGHT_VALUE))
+                    self.grid[i][j].add_con(Connection(i+1, j, DOWN, STRAIGHT_VALUE))
                     if j<3:
-                        self.grid[i][j].cons.append(Connection(i+1, j+1, DOWN_RIGHT, DIAGONAL_VALUE))
+                        self.grid[i][j].add_con(Connection(i+1, j+1, DOWN_RIGHT, DIAGONAL_VALUE))
 
                 if j<3:
-                    self.grid[i][j].cons.append(Connection(i, j+1, RIGHT, STRAIGHT_VALUE))
+                    self.grid[i][j].add_con(Connection(i, j+1, RIGHT, STRAIGHT_VALUE))
                     if i>0:
-                        self.grid[i][j].cons.append(Connection(i-1, j+1, UP_RIGHT, DIAGONAL_VALUE))
+                        self.grid[i][j].add_con(Connection(i-1, j+1, UP_RIGHT, DIAGONAL_VALUE))
 
                 if i>0:
-                    self.grid[i][j].cons.append(Connection(i-1, j, UP, STRAIGHT_VALUE))
+                    self.grid[i][j].add_con(Connection(i-1, j, UP, STRAIGHT_VALUE))
                     if j>0:
-                        self.grid[i][j].cons.append(Connection(i-1, j-1, UP_LEFT, DIAGONAL_VALUE))
+                        self.grid[i][j].add_con(Connection(i-1, j-1, UP_LEFT, DIAGONAL_VALUE))
 
         self.ingredients = copy.deepcopy(ing)
 
@@ -473,29 +501,38 @@ def insertWord(bowl: Bowl, wordIndex):
 
     print("word difficulty pass: ", dif_pass, '/', dif_fail)
     print("multiple paths pass: ", mp_pass, '/', mp_fail)
+    print("connection number pass: ", cn_pass, '/', cn_fail)
 
     bowl.clearLayers()
 
 
-    # print("letter occurances:")
+    if wordIndex == 0: # if is first word
 
-    occured = False
-    for l in range(current_word.len):
+        insertLetterAfter(copy.deepcopy(bowl), 0, 0, 0, 0, NOTHING, True)
+        insertLetterAfter(copy.deepcopy(bowl), 0, 0, 0, 1, NOTHING, True)
+        insertLetterAfter(copy.deepcopy(bowl), 0, 0, 1, 1, NOTHING, True)
 
-        for row in bowl.grid:
-            for sq in row:
+    else:
 
-                if sq.letter == current_word.letters[l]:
+        # print("letter occurances:")
 
-                    # print("\tletter(" + sq.letter + ") found at x:", sq.x, "y:", sq.y)
+        occured = False
+        for l in range(current_word.len):
 
-                    occured = True
-                    insertLetterBefore(copy.deepcopy(bowl), wordIndex, l, sq.x, sq.y, sq, l, NOTHING)
+            for row in bowl.grid:
+                for sq in row:
 
-    if occured == False:
-        for row in bowl.grid:
-            for sq in row:
-                insertLetterAfter(copy.deepcopy(bowl), wordIndex, 0, sq.x, sq.y, NOTHING, True)
+                    if sq.letter == current_word.letters[l]:
+
+                        # print("\tletter(" + sq.letter + ") found at x:", sq.x, "y:", sq.y)
+
+                        occured = True
+                        insertLetterBefore(copy.deepcopy(bowl), wordIndex, l, sq.x, sq.y, sq, l, NOTHING)
+
+        if occured == False:
+            for row in bowl.grid:
+                for sq in row:
+                    insertLetterAfter(copy.deepcopy(bowl), wordIndex, 0, sq.x, sq.y, NOTHING, True)
 
 
 
@@ -504,6 +541,22 @@ def insertWord(bowl: Bowl, wordIndex):
 def insertLetterBefore(bowl: Bowl, wordIndex, letterIndex, i, j, end_sq: Square, end_inx, code = NOTHING):
 
     currentLetter = bowl.ingredients.words[wordIndex].letters[letterIndex]
+
+    global cn_pass, cn_fail
+
+    if bowl.ingredients.letterNumbers[ord(currentLetter) - ord('a')].req / bowl.ingredients.letterNumbers[ord(currentLetter) - ord('a')].num > bowl.grid[i][j].con_num:
+        
+        # print("too many connections required for letter (" + currentLetter + ") in place", i, j)
+
+        cn_fail += 1
+
+        return
+
+    else:
+
+        cn_pass += 1
+
+        pass
 
     # print("InsertLetterBefore:", currentLetter, "x:", i, "y:", j)
 
@@ -558,6 +611,23 @@ def insertLetterAfter(bowl, wordIndex, letterIndex, i, j, code, insert_now = Tru
     currentLetter = bowl.ingredients.words[wordIndex].letters[letterIndex]
 
     # print("InsertLetterAfter:", currentLetter, "\ti:", i, "j:", j)
+
+    global cn_pass, cn_fail
+
+    if bowl.ingredients.letterNumbers[ord(currentLetter) - ord('a')].req / bowl.ingredients.letterNumbers[ord(currentLetter) - ord('a')].num > bowl.grid[i][j].con_num:
+        
+        # print("too many connections required for letter (" + currentLetter + ") in place", i, j)
+
+        cn_fail += 1
+
+        return
+
+    else:
+
+        cn_pass += 1
+
+        pass
+
 
     if bowl.grid[i][j].letter == EMPTY or ( bowl.grid[i][j].letter == currentLetter and bowl.grid[i][j].layer == 0): # if this tile is empty or contains same letter from different word
 
@@ -818,7 +888,7 @@ for i in range(inputWords.number):
 
 
 ###################################
-for i in tempcheckiffitslist[::1]:
+for i in tempcheckiffitslist[::-1]:
     makeSalad(copy.deepcopy(i))
 ###################################
 
