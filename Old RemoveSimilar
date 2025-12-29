@@ -1,0 +1,58 @@
+def removeSimilar(saladset):
+    i = 0
+    j = 0
+    pause_outer_loop = False
+    pause_inner_loop = False
+
+    while i < saladset.number:
+
+        j = i + 1
+        continue_inner_loop = True
+        while j < saladset.number and continue_inner_loop:
+
+            # comparing i with j
+
+            similar_word_number = 0
+
+            for k in range(saladset.salads[i].ingredients.number): # for each word
+
+                similar_code_number = 0
+
+                for m in range(len(saladset.salads[i].ingredients.words[k].code)): # for each code 
+
+                    if saladset.salads[i].ingredients.words[k].code[m] == saladset.salads[j].ingredients.words[k].code[m]: # if code looks same
+                        similar_code_number += 1
+
+                if similar_code_number >= len(saladset.salads[i].ingredients.words[k].code) * SIMILAR_WORD_PART: # if many codes looked same
+                    similar_word_number+=1
+
+            if similar_word_number >= saladset.salads[i].ingredients.number * SIMILAR_BOWL_PART: # if many words looked same
+
+                # print("\t\ttoo similar...")
+
+                if saladset.salads[i].difficulty >= saladset.salads[j].difficulty:
+
+                    # print("\t\t\tdeleting", j)
+
+                    saladset.pop(j)
+                    continue_inner_loop = True
+                    pause_inner_loop = True
+                    pause_outer_loop = False
+                    break
+                else:
+
+                    # print("\t\t\tdeleting", i)
+
+                    saladset.swap(i, j)
+                    saladset.pop(j)
+                    continue_inner_loop = False
+                    pause_outer_loop = True
+                    break
+
+            if pause_inner_loop == False: # didn't delete or deleted 1st one 
+                j += 1
+            pause_inner_loop = False
+
+        if pause_outer_loop == False: 
+            i += 1
+        pause_outer_loop = False
