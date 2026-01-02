@@ -1,0 +1,223 @@
+import copy, multiprocessing, time, threading
+
+# from Constants import*
+from Bowl import Bowl
+from Ingredients import*
+
+
+def makeSalad(OutputSalads, ingredients):
+    start = time.perf_counter()
+    insertWord(OutputSalads, Bowl(ingredients), 0)
+    print(time.perf_counter() - start)
+
+
+def addSalad(OutputSalads, bowl):
+    process_index = int(multiprocessing.current_process().name)
+
+    OutputSalads.put(copy.deepcopy(bowl))
+                        
+    # if Salads[process_index].number >= MAX_SALAD_NUM:
+
+        # removeSimilar(Salads[process_index])
+        # sortSS(SaladsToAdd)
+
+        # GenerationProcesses[process_index].terminate()
+        # GenerationProcesses[process_index][1] = False;
+
+
+def insertWord(OutputSalads, bowl, wordIndex):
+
+    current_word = bowl.ingredients.words[wordIndex]
+
+    bowl = copy.deepcopy(bowl)
+
+    bowl.clearLayers()
+
+    if wordIndex == 0: # if is first word
+
+        insertNextLetter(OutputSalads, bowl, 0, 0, 0, 0, NOTHING, True)
+        insertNextLetter(OutputSalads, bowl, 0, 0, 0, 1, NOTHING, True)
+        insertNextLetter(OutputSalads, bowl, 0, 0, 1, 1, NOTHING, True)
+
+    else:
+
+        occured = False # if letter is present in grid, it can be reused
+        for l in range(current_word.len):
+
+            for row in bowl.grid:
+                for sq in row:
+
+                    if sq.letter == current_word.letters[l]:
+
+                        # print("\tletter(" + sq.letter + ") found at x:", sq.x, "y:", sq.y)
+
+                        occured = True
+                        insertPreviousLetter(OutputSalads, bowl, wordIndex, l, sq.x, sq.y, sq, l, NOTHING)
+
+        if occured == False:
+            for row in bowl.grid:
+                for sq in row:
+                    insertNextLetter(OutputSalads, bowl, wordIndex, 0, sq.x, sq.y, NOTHING, True)
+
+
+
+
+
+def insertPreviousLetter(OutputSalads, bowl, wordIndex, letterIndex, i, j, end_sq, end_inx, code = NOTHING):
+
+    currentLetter = bowl.ingredients.words[wordIndex].letters[letterIndex]
+
+    # global cn_pass, cn_fail
+
+    if bowl.ingredients.letterNumbers[ord(currentLetter) - ord('a')].req / bowl.ingredients.letterNumbers[ord(currentLetter) - ord('a')].num > bowl.grid[i][j].con_num:
+        
+        # too many connections required for letter 'currentLetter' in place (i, j)
+
+        return
+
+    else:
+        pass
+
+    # print("insertPreviousLetter:", currentLetter, "x:", i, "y:", j)
+
+    if bowl.grid[i][j].letter == EMPTY or (bowl.grid[i][j].letter == currentLetter and bowl.grid[i][j].layer == 0):
+
+        # print("inserting...")
+
+        bowl = copy.deepcopy(bowl)
+
+        bowl.grid[i][j].letter = currentLetter
+        bowl.grid[i][j].layer = 1
+
+        if code != NOTHING:
+
+            bowl.ingredients.words[wordIndex].code[letterIndex] = invertCode(code)
+            bowl.ingredients.words[wordIndex].difficulty += calculateIncome(code)
+            bowl.difficulty += calculateIncome(code)
+
+        if letterIndex == 0: # if this was first letter
+
+            # print("first letter...")
+
+            bowl.grid[end_sq.x][end_sq.y].layer = 0
+            insertNextLetter(OutputSalads, bowl, wordIndex, end_inx, end_sq.x, end_sq.y, NOTHING, False)
+
+        else:
+
+            same_letter_found = False
+
+            for k in bowl.grid[i][j].cons:
+                if bowl.grid[k.x][k.y].layer == 0 and bowl.grid[k.x][k.y].letter == bowl.ingredients.words[wordIndex].letters[letterIndex - 1]: # grid cell with same letter as previous in word
+                    same_letter_found = True
+                    insertPreviousLetter(OutputSalads, bowl, wordIndex, letterIndex - 1, k.x, k.y, end_sq, end_inx, k.code)
+                    
+
+            if same_letter_found == False:
+                for k in bowl.grid[i][j].cons:
+                    insertPreviousLetter(OutputSalads, bowl, wordIndex, letterIndex - 1, k.x, k.y, end_sq, end_inx, k.code)
+
+    else:
+
+        # print("cannot insert...")
+
+        pass
+
+                
+
+def insertNextLetter(OutputSalads, bowl, wordIndex, letterIndex, i, j, code, insert_now = True):
+
+    # if GenerationThreads[int(threading.current_thread().name)][1] == False:
+    #     return
+
+    currentLetter = bowl.ingredients.words[wordIndex].letters[letterIndex]
+
+    # print("insertNextLetter:", currentLetter, "\ti:", i, "j:", j)
+
+    # global cn_pass, cn_fail
+
+    if bowl.ingredients.letterNumbers[ord(currentLetter) - ord('a')].req / bowl.ingredients.letterNumbers[ord(currentLetter) - ord('a')].num > bowl.grid[i][j].con_num:
+        
+        # print("too many connections required for letter (" + currentLetter + ") in place", i, j)
+
+        # cn_fail += 1
+
+        return
+
+    else:
+
+        # cn_pass += 1
+
+        pass
+
+
+    if bowl.grid[i][j].letter == EMPTY or ( bowl.grid[i][j].letter == currentLetter and bowl.grid[i][j].layer == 0): # if this tile is empty or contains same letter from different word
+
+        bowl = copy.deepcopy(bowl)
+
+        if insert_now:
+
+            # print("\tinserting...")
+
+            bowl.grid[i][j].letter = currentLetter
+            bowl.grid[i][j].layer = 1
+
+            if code != NOTHING:
+
+                bowl.ingredients.words[wordIndex].code[letterIndex - 1] = code;
+                bowl.ingredients.words[wordIndex].difficulty += calculateIncome(code)
+                bowl.difficulty += calculateIncome(code)
+
+        # bowl.cout(1)
+
+        if letterIndex + 1 == bowl.ingredients.words[wordIndex].len: # if this was last letter
+
+            # print("\tlast letter...")
+
+            # print("difficulty:", bowl.ingredients.words[wordIndex].difficulty, "/", bowl.ingredients.words[wordIndex].min_diff)
+
+            if bowl.ingredients.words[wordIndex].difficulty >= bowl.ingredients.words[wordIndex].min_diff: # if word is difficult enough
+
+                # print("\tdifficulty passed...")
+
+                # global dif_pass
+                # dif_pass += 1
+
+                if wordIndex + 1 == bowl.ingredients.number: # if this was last word
+
+                    # print("\tlast word...")
+
+                    if bowl.checkMultiplePaths():
+                        addSalad(OutputSalads, bowl)
+                        
+                    else:
+                        pass
+
+                else:
+                    insertWord(OutputSalads, bowl, wordIndex + 1)
+
+            else:
+                pass
+
+        else:
+
+            # print("next letter...")
+
+            # print("connections:")
+
+            same_letter_found = False
+
+            for k in bowl.grid[i][j].cons:
+
+                # print(k)
+
+                if bowl.grid[k.x][k.y].layer == 0 and bowl.grid[k.x][k.y].letter == bowl.ingredients.words[wordIndex].letters[letterIndex + 1]: # grid cell with same letter as next in word
+                    same_letter_found = True
+                    insertNextLetter(OutputSalads, bowl, wordIndex, letterIndex + 1, k.x, k.y, k.code, True)
+                    
+
+            if same_letter_found == False:
+                for k in bowl.grid[i][j].cons:
+                    insertNextLetter(OutputSalads, bowl, wordIndex, letterIndex + 1, k.x, k.y, k.code, True)
+
+    else:
+        pass
