@@ -1,0 +1,161 @@
+import copy, multiprocessing, threading, time, random
+
+from Bowl import Bowl
+from Ingredients import*
+
+
+SKIP_CHANCE = 0.7
+
+
+def makeSalad(OutputSalads, ingredients):
+    start = time.perf_counter()
+    insertWord(OutputSalads, Bowl(ingredients), 0)
+    print(time.perf_counter() - start)
+
+
+def addSalad(OutputSalads, bowl):
+    process_index = int(multiprocessing.current_process().name)
+
+    OutputSalads.put(copy.deepcopy(bowl))
+                        
+    # if Salads[process_index].number >= MAX_SALAD_NUM:
+
+        # removeSimilar(Salads[process_index])
+        # sortSS(SaladsToAdd)
+
+        # GenerationProcesses[process_index].terminate()
+        # GenerationProcesses[process_index][1] = False;
+
+
+def insertWord(OutputSalads, bowl, wordIndex):
+
+    current_word = bowl.ingredients.words[wordIndex]
+
+    bowl.clearLayers()
+
+    if wordIndex == 0: # if is first word
+
+        t1 = threading.Thread(target=insertNextLetter, args=(OutputSalads, bowl, 0, 0, 0, 0, NOTHING, True),name='1stword00')
+        t1.start()
+        t2 = threading.Thread(target=insertNextLetter, args=(OutputSalads, bowl, 0, 0, 0, 1, NOTHING, True),name='1stword01')
+        t2.start()
+        t3 = threading.Thread(target=insertNextLetter, args=(OutputSalads, bowl, 0, 0, 1, 1, NOTHING, True),name='1stword11')
+        t3.start()
+        t1.join()
+        t2.join()
+        t3.join()
+
+    else:
+
+        letter_occured = False # if letter is present in grid, it can be reused
+        for l in range(current_word.len):
+
+            for row in bowl.grid:
+                for sq in row:
+
+                    if sq.letter == current_word.letters[l]: # if letters match
+
+                        letter_occured = True
+                        insertPreviousLetter(OutputSalads, bowl, wordIndex, l, sq.x, sq.y, sq, l, NOTHING)
+
+        if letter_occured == False or random.random() > SKIP_CHANCE: # can't anchor the word nowhere
+            for row in bowl.grid:
+                for sq in row:
+                    insertNextLetter(OutputSalads, bowl, wordIndex, 0, sq.x, sq.y, NOTHING, True)
+
+
+
+
+
+def insertPreviousLetter(OutputSalads, bowl, wordIndex, letterIndex, i, j, end_sq, end_inx, code = NOTHING):
+
+    currentLetter = bowl.ingredients.words[wordIndex].letters[letterIndex]
+
+    if bowl.ingredients.get_letterNumber(currentLetter).req / bowl.ingredients.get_letterNumber(currentLetter).num > bowl.grid[i][j].con_num:
+        # if letter requires more free spaces than current square has avaliable
+        return
+
+    if bowl.grid[i][j].letter == EMPTY or (bowl.grid[i][j].letter == currentLetter and bowl.grid[i][j].layer == 0):
+        # if this square is empty or contains same letter from different word
+        bowl = copy.deepcopy(bowl)
+
+        bowl.grid[i][j].letter = currentLetter
+        bowl.grid[i][j].layer = 1 # layer 1 means square was used in making of this word
+
+        if code != NOTHING:
+
+            bowl.ingredients.words[wordIndex].code[letterIndex] = (code + 4) % 8 # invert code cos' going backwards
+            income = calculateIncome(code)
+            bowl.ingredients.words[wordIndex].difficulty += income
+            bowl.difficulty += income
+
+        if letterIndex == 0: # if is first letter
+
+            bowl.grid[end_sq.x][end_sq.y].layer = 0
+            insertNextLetter(OutputSalads, bowl, wordIndex, end_inx, end_sq.x, end_sq.y, NOTHING, False)
+
+        else:
+
+            same_letter_found = False
+
+            for k in bowl.grid[i][j].cons:
+                if bowl.grid[k.x][k.y].layer == 0 and bowl.grid[k.x][k.y].letter == bowl.ingredients.words[wordIndex].letters[letterIndex - 1]: # grid cell with same letter as previous in word
+                    same_letter_found = True
+                    insertPreviousLetter(OutputSalads, bowl, wordIndex, letterIndex - 1, k.x, k.y, end_sq, end_inx, k.code)
+                    
+
+            if same_letter_found == False or random.random() > SKIP_CHANCE:
+                for k in bowl.grid[i][j].cons:
+                    insertPreviousLetter(OutputSalads, bowl, wordIndex, letterIndex - 1, k.x, k.y, end_sq, end_inx, k.code)
+
+                
+
+def insertNextLetter(OutputSalads, bowl, wordIndex, letterIndex, i, j, code, insert_now = True):
+
+    currentLetter = bowl.ingredients.words[wordIndex].letters[letterIndex]
+
+    if bowl.ingredients.get_letterNumber(currentLetter).req / bowl.ingredients.get_letterNumber(currentLetter).num > bowl.grid[i][j].con_num:
+        # if letter requires more free spaces than current square has avaliable
+        return
+
+    if bowl.grid[i][j].letter == EMPTY or ( bowl.grid[i][j].letter == currentLetter and bowl.grid[i][j].layer == 0):
+        # if this square is empty or contains same letter from different word
+        bowl = copy.deepcopy(bowl)
+
+        if insert_now:
+
+            bowl.grid[i][j].letter = currentLetter
+            bowl.grid[i][j].layer = 1
+
+            if code != NOTHING:
+
+                bowl.ingredients.words[wordIndex].code[letterIndex - 1] = code;
+                bowl.ingredients.words[wordIndex].difficulty += calculateIncome(code)
+                bowl.difficulty += calculateIncome(code)
+
+        if letterIndex + 1 == bowl.ingredients.words[wordIndex].len: # if is last letter
+
+            if bowl.ingredients.words[wordIndex].difficulty >= bowl.ingredients.words[wordIndex].min_diff: # if word is difficult enough
+
+                if wordIndex + 1 == bowl.ingredients.number: # if is last word
+
+                    if bowl.checkMultiplePaths():
+                        addSalad(OutputSalads, bowl)
+
+                else: # insert next word
+                    insertWord(OutputSalads, copy.deepcopy(bowl), wordIndex + 1)
+
+        else: # insert next letter
+
+            same_letter_found = False
+
+            for k in bowl.grid[i][j].cons:
+                # look for square with same letter as next in word
+                if bowl.grid[k.x][k.y].layer == 0 and bowl.grid[k.x][k.y].letter == bowl.ingredients.words[wordIndex].letters[letterIndex + 1]:
+                    same_letter_found = True
+                    insertNextLetter(OutputSalads, bowl, wordIndex, letterIndex + 1, k.x, k.y, k.code, True)
+                    
+
+            if same_letter_found == False or random.random() > SKIP_CHANCE:
+                for k in bowl.grid[i][j].cons:
+                    insertNextLetter(OutputSalads, bowl, wordIndex, letterIndex + 1, k.x, k.y, k.code, True)
