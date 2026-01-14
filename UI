@@ -1,0 +1,643 @@
+import pygame as pg
+import queue
+
+from Window import Window
+from Button import Button
+from Block import Block
+from Text import Text
+from TextInput import TextInput
+from WordBox import WordBox
+from LevelBox import LevelBox
+from GroupBox import GroupBox
+from NumberInput import NumberInput
+from ScrollList import ScrollList
+
+from Word import*
+from Ingredients import*
+
+from Constants import*
+import IngredientManager
+from LevelsManager import*
+
+SHOWMOUSEPOS = False
+# SHOWMOUSEPOS = True
+
+
+def drawsalad():
+    # global ClickedPath
+    for i in range(4):
+        for j in range(4):
+            LetterBlocks[i][j].drawBg(screen)
+
+    for s in range(1, len(ClickedPath)):
+        pg.draw.line(screen, "grey", LetterBlocks[ClickedPath[s-1][0]][ClickedPath[s-1][1]].pos, LetterBlocks[ClickedPath[s][0]][ClickedPath[s][1]].pos, 50)
+    if len(ClickedPath) == 1:
+        pg.draw.rect(screen, "grey", pg.rect.Rect(LetterBlocks[ClickedPath[0][0]][ClickedPath[0][1]].pos[0] - 25, LetterBlocks[ClickedPath[0][0]][ClickedPath[0][1]].pos[1] - 25, 50, 50))
+            
+    for i in range(4):
+        for j in range(4):
+            LetterBlocks[i][j].drawLt(screen)
+
+    for box in SaladWordBoxes:
+        box.draw(screen)
+
+def setsalad(bowl = None):
+
+    if bowl is None:
+        bowl = Salads[SaladSetDisplayIndex].salads[SaladDisplayIndexes[SaladSetDisplayIndex]]
+
+    for inx, row in enumerate(bowl.grid):
+        for jnx, sq in enumerate(row):
+            LetterBlocks[inx][jnx].set(sq)
+
+    SaladWordBoxes.clear()
+    size = 50
+    for word in bowl.ingredients.words:
+        SaladWordBoxes.append(WordBox([Window_Results, Window_Save, Window_Play], word, 50, SCREEN_WIDTH - 30, 200 + (size + 10)*len(SaladWordBoxes)))
+
+    ClickedPath.clear()
+           
+
+
+def othWindow_Generate():
+    pg.draw.line(screen, "#005c9c", (SCREEN_WIDTH - 605, 0), (SCREEN_WIDTH - 605, SCREEN_HEIGHT), 10)
+    pg.draw.line(screen, "#005c9c", (SCREEN_WIDTH - 600, 140), (SCREEN_WIDTH, 140), 10)
+    pg.draw.line(screen, "#005c9c", (SCREEN_WIDTH - 600, 200), (SCREEN_WIDTH, 200), 10)
+
+def othWindow_Results():
+    global SaladSetDisplayIndex
+
+    for i in range(len(OutputSalads)):
+        try:
+            salad = OutputSalads[i].get_nowait()
+            if salad:
+                Salads[i].add(salad)
+
+        except queue.Empty: # remove similar salads when queue is empty
+
+            if len(Salads) <= 0:
+                break
+
+            for i in range(len(Salads)):
+                if Salads[i].number <= 0:
+                    continue
+
+                IngredientManager.removeSimilar(Salads[i])
+                SaladLengths[i] = Salads[i].number
+
+                if SaladSetDisplayIndex == i and not SaladDisplayIndexes[i] == None:
+                    if SaladLengths[i] <= SaladDisplayIndexes[SaladSetDisplayIndex]:
+                        SaladDisplayIndexes[SaladSetDisplayIndex] = SaladLengths[i] - 1
+
+                if SaladDisplayIndexes[SaladSetDisplayIndex]:
+                    setsalad()
+
+
+    if SaladSetDisplayIndex == None: # no salad sets loaded
+
+        if len(Salads) > 0: # load 1st salad set
+            SaladSetDisplayIndex = 0
+        else:
+            # loading
+            Button_NextSaladSet.visible = False
+            Button_PreviousSaladSet.visible = False
+
+        Button_NextSalad.visible = False
+        Button_PreviousSalad.visible = False
+
+    else: # some salad sets loaded
+
+        if SaladDisplayIndexes[SaladSetDisplayIndex] == None: # no salads loaded of current salad set
+
+            if SaladLengths[SaladSetDisplayIndex] > 0: # load 1st salad of current salad set
+                SaladDisplayIndexes[SaladSetDisplayIndex] = 0
+                setsalad()
+            else:
+                #loading
+                Button_NextSalad.visible = False
+                Button_PreviousSalad.visible = False
+
+        else: # some salads loaded of current salad set
+
+            drawsalad()
+
+            Button_NextSalad.visible = (False if SaladDisplayIndexes[SaladSetDisplayIndex] + 1 >= SaladLengths[SaladSetDisplayIndex] else True) # down arrow
+            Button_PreviousSalad.visible = (False if SaladDisplayIndexes[SaladSetDisplayIndex] <= 0 else True) # up arrow
+
+        Button_NextSaladSet.visible = (False if SaladSetDisplayIndex + 1 >= len(SaladDisplayIndexes) else True) # right arrow
+        Button_PreviousSaladSet.visible = (False if SaladSetDisplayIndex <= 0 else True) # left arrow
+
+    # currently displayed salad set index
+    SaladSet_index_text = (str(SaladSetDisplayIndex + 1) if SaladSetDisplayIndex != None else '0') + " / " + str(len(SaladDisplayIndexes)) if len(SaladDisplayIndexes) > 1 else ''
+    # currently displayed salad index in salad set
+    if SaladSetDisplayIndex != None and SaladLengths[SaladSetDisplayIndex] >= 1:
+        Salad_index_text = str(SaladDisplayIndexes[SaladSetDisplayIndex] + 1) + " / " + str(SaladLengths[SaladSetDisplayIndex])
+        Salad_index_text_length = len(Salad_index_text) - len(str(SaladLengths[SaladSetDisplayIndex])) - 2 # length of part before '/'
+    else:
+        Salad_index_text = ''
+        Salad_index_text_length = 0
+    
+
+    size = 75
+    font = pg.font.Font("freesansbold.ttf", size)
+    SS_textsurf = font.render(SaladSet_index_text, True, "white")
+    S_textsurf = font.render(Salad_index_text, True, "white")
+    screen.blit(SS_textsurf, (12, SCREEN_HEIGHT/2 - size/2 + 2)) # salad set indicator (horizontal)
+    screen.blit(S_textsurf, (SCREEN_WIDTH/2 - 40*Salad_index_text_length + 6, 12)) # salad indicator (vertical)
+
+
+    pg.draw.line(screen, "#005c9c", (0, SCREEN_HEIGHT/2 - size/2 - 3), (40*len(SaladSet_index_text) - 25, SCREEN_HEIGHT/2 - size/2 - 3), 10)
+    pg.draw.line(screen, "#005c9c", (40*len(SaladSet_index_text) - 25, SCREEN_HEIGHT/2 - size/2 - 3), (40*len(SaladSet_index_text) - 25, SCREEN_HEIGHT/2 + size/2 + 2), 10)
+    pg.draw.line(screen, "#005c9c", (0, SCREEN_HEIGHT/2 + size/2 + 0), (40*len(SaladSet_index_text) - 25, SCREEN_HEIGHT/2 + size/2 + 0), 10)
+
+    # pg.draw.line(screen, "white", (0, SCREEN_HEIGHT/2), (SCREEN_WIDTH, SCREEN_HEIGHT/2))
+    # pg.draw.line(screen, "white", (SCREEN_WIDTH/2, 0), (SCREEN_WIDTH/2, SCREEN_HEIGHT))
+
+
+def othsave():
+    drawsalad()
+
+    Button_NextSaladSave.visible = (False if SaladSetDisplayIndex + 1 >= len(PickedSalads) else True)
+    Button_PreviousSaladSave.visible = (False if SaladSetDisplayIndex <= 0 else True)
+
+    Salad_index_text = str(SaladSetDisplayIndex + 1) + " / " + str(len(PickedSalads))
+
+    size = 75
+    font = pg.font.Font("freesansbold.ttf", size)
+    SS_textsurf = font.render(Salad_index_text, True, "white")
+    screen.blit(SS_textsurf, (12, SCREEN_HEIGHT/2 - size/2 + 2))
+
+    pg.draw.line(screen, "#005c9c", (0, SCREEN_HEIGHT/2 - size/2 - 3), (40*len(Salad_index_text) - 25, SCREEN_HEIGHT/2 - size/2 - 3), 10)
+    pg.draw.line(screen, "#005c9c", (40*len(Salad_index_text) - 25, SCREEN_HEIGHT/2 - size/2 - 3), (40*len(Salad_index_text) - 25, SCREEN_HEIGHT/2 + size/2 + 2), 10)
+    pg.draw.line(screen, "#005c9c", (0, SCREEN_HEIGHT/2 + size/2 + 0), (40*len(Salad_index_text) - 25, SCREEN_HEIGHT/2 + size/2 + 0), 10)
+
+def othchoose():
+    pg.draw.line(screen, COLORS.DARK_BLUE.value, (0, 150), (SCREEN_WIDTH, 150), 10)
+
+def othplay():
+    drawsalad()
+
+    clicked_word = ""
+    for (x, y) in ClickedPath:
+        clicked_word += LetterBlocks[x][y].letter
+
+    if currentGroupIndex != -1:
+        currentSalad = Groups[currentGroupIndex].levels[currentLevelIndex]
+    else:
+        currentSalad = Levels[currentLevelIndex].bowl
+
+    for word in currentSalad.ingredients.words:
+        if word.letters == clicked_word.lower():
+
+            for (x, y) in ClickedPath:
+
+                tweaks_to_remove = []
+                tweak_found = False
+
+                for t in currentSalad.tweaks:
+
+                    if t.a == LetterBlocks[x][y]:
+
+                        LetterBlocks[t.a.x][t.a.y].uses -= 1
+
+                        if t.word == clicked_word.lower():
+
+                            LetterBlocks[t.b.x][t.b.y].uses -= 1
+
+                        elif LetterBlocks[t.a.x][t.a.y].uses == 1 and t.closed == False: LetterBlocks[t.a.x][t.a.y].uses = 0
+
+                        if t.closed == False: tweaks_to_remove.append(t)
+                        tweak_found = True
+                    elif t.b == LetterBlocks[x][y]:
+
+                        LetterBlocks[t.b.x][t.b.y].uses -= 1
+
+                        if t.word == clicked_word.lower():
+
+                            LetterBlocks[t.a.x][t.a.y].uses -= 1
+
+                        elif LetterBlocks[t.b.x][t.b.y].uses == 1 and t.closed == False: 
+
+                            LetterBlocks[t.b.x][t.b.y].uses = 0
+
+                        if t.closed == False: tweaks_to_remove.append(t)
+                        tweak_found = True
+
+                if tweak_found == False:
+                    LetterBlocks[x][y].uses -= 1
+
+            for t in tweaks_to_remove:
+                currentSalad.tweaks.remove(t)
+
+            for wb in SaladWordBoxes:
+                if wb.word == word:
+                    wb.hidden = False
+                    wb.highlighted_letter_number = 0
+                    break
+
+
+            # here check if all words were found
+
+            finished = True
+            for wb in SaladWordBoxes: 
+                if wb.hidden:
+                    finished = False
+            if finished: 
+                SetWindow(Window_Finish)
+
+            ClickedPath.clear()
+            break
+
+def othfin():
+    pg.draw.line(screen, COLORS.DARK_BLUE.value, (0, 150), (SCREEN_WIDTH, 150), 10)
+    
+
+
+# Windows
+Window_Home = Window("main")
+Window_Generate = Window("create", othWindow_Generate)
+Window_Results = Window("results", othWindow_Results)
+Window_Save = Window("export", othsave)
+Window_ChooseGame = Window("choose", othchoose)
+Window_Play = Window("play", othplay)
+Window_Finish = Window("finish", othfin)
+
+def SetWindow(window):
+    global current_window, currentLevelIndex, currentGroupIndex
+    current_window = window
+    for b in current_window.buttons:
+        b.visible = True
+    match window.name:
+        case "main":
+            currentLevelIndex = -1
+            currentGroupIndex = -1
+        case "finish":
+            if currentGroupIndex != -1:
+                Groups[currentGroupIndex].completed_levels_number += 1
+                currentLevelIndex += 1
+                if Groups[currentGroupIndex].completed_levels_number < Groups[currentGroupIndex].level_number:
+                    Text_NextLevel.retext("Next Level (" + str(Groups[currentGroupIndex].completed_levels_number + 1) + ')')
+                else:
+                    Text_NextLevel.retext("Select Game")
+            else:
+                if currentLevelIndex + 1 < len(Levels):
+                    Text_NextLevel.retext("Next Level (" + str(Levels[currentLevelIndex].number) + ')')
+                else:
+                    Text_NextLevel.retext("Select Game")
+        case _:
+            pass
+
+def Action_PlayLevel(self):
+    global SaladSetDisplayIndex, currentLevelIndex, currentGroupIndex
+    currentGroupIndex = -1
+    currentLevelIndex = Levels.index(self)
+    SaladSetDisplayIndex = 0
+    SetWindow(Window_Play)
+    setsalad(self.bowl)
+    for wb in SaladWordBoxes:
+        wb.hidden = True
+def Action_PlayGroup(self):
+    global SaladSetDisplayIndex, currentLevelIndex, currentGroupIndex
+    currentGroupIndex = Groups.index(self)
+    currentLevelIndex = self.completed_levels_number
+    SaladSetDisplayIndex = 0
+    SetWindow(Window_Play)
+    setsalad(self.levels[SaladSetDisplayIndex])
+    for wb in SaladWordBoxes:
+        wb.hidden = True
+
+def GetLevels():
+    global Level_Paths
+    for lp in range(len(Level_Paths)):
+        Levels.append(LevelBox(lp, Window_ChooseGame, Level_Paths[lp], 280, 330 + 350*lp, ac=Action_PlayLevel))
+def GetGroups():
+    for gp in range(len(Group_Paths)):
+        Groups.append(GroupBox(gp, Window_ChooseGame, Group_Paths[gp], 830, 330 + 350*gp, ac=Action_PlayGroup))
+
+
+def nxbtact(): SetWindow(Window_ChooseGame)
+def Action_Generate(): SetWindow(Window_Generate)
+
+def Action_Go(): 
+    SetWindow(Window_Results)
+
+    InputWords = Ingredients()
+    allgood = True
+
+    for it in ScrollList_WordInputs.items: # extract words from text Input fields
+
+        text = it.text.lower()
+        for l in range(len(text)):
+            if not 97 <= ord(text[l]) <= 122:
+                text.replace(text[l], '', 1)
+
+        if 16 >= len(text) >= 4:
+            InputWords.add(Word(text))
+        elif text != "": # if some word isn't between 4 and 16 characters
+            allgood = False 
+            break
+
+    if allgood:
+        IngredientManager.manage(InputWords, Number_WordRequirement.value)
+    else:
+        print("Not Go")
+
+
+def Action_PickSalad():
+    PickedSalads.append(Salads[SaladSetDisplayIndex].salads[SaladDisplayIndexes[SaladSetDisplayIndex]])
+
+def Action_Save():
+
+    if len(PickedSalads) == 0:
+        Action_PickSalad()
+
+    SetWindow(Window_Save)
+    global SaladSetDisplayIndex
+    SaladSetDisplayIndex = 0
+    setsalad(PickedSalads[0])
+    for process in GenerationProcesses:
+        process.terminate()
+
+def Action_Export():
+    if len(PickedSalads) <= 0:
+        pass
+    elif len(PickedSalads) == 1:
+        addLevel(PickedSalads[0])
+    elif len(PickedSalads) >= 256:
+        pass
+    else:
+        addGroup(PickedSalads)
+    SetWindow(Window_Home)
+
+def Action_NextSaladSet():
+    global SaladSetDisplayIndex
+    if SaladSetDisplayIndex + 1 <= len(SaladDisplayIndexes) - 1:
+        SaladSetDisplayIndex += 1
+        if SaladDisplayIndexes[SaladSetDisplayIndex] != None:
+            setsalad()
+
+def Action_PreviousSaladSet(): 
+    global SaladSetDisplayIndex
+    if SaladSetDisplayIndex > 0:
+        SaladSetDisplayIndex -= 1
+        if SaladDisplayIndexes[SaladSetDisplayIndex] != None:
+            setsalad()
+
+def Action_NextSalad(): 
+    if SaladDisplayIndexes[SaladSetDisplayIndex] + 1 < SaladLengths[SaladSetDisplayIndex]:
+        SaladDisplayIndexes[SaladSetDisplayIndex] += 1
+        setsalad()
+
+def Action_PreviousSalad(): 
+    if SaladDisplayIndexes[SaladSetDisplayIndex] > 0:
+        SaladDisplayIndexes[SaladSetDisplayIndex] -= 1
+        setsalad()
+
+def Action_NextSaladSave():
+    global SaladSetDisplayIndex
+    if SaladSetDisplayIndex + 1 < len(PickedSalads) - 1:
+        SaladSetDisplayIndex += 1
+        setsalad(PickedSalads[SaladSetDisplayIndex])
+
+def Action_PreviousSaladSave():
+    global SaladSetDisplayIndex
+    if SaladSetDisplayIndex > 0:
+        SaladSetDisplayIndex -= 1
+        setsalad(PickedSalads[SaladSetDisplayIndex])
+
+def Action_Home():
+    SetWindow(Window_Home)
+    for process in GenerationProcesses:
+        process.terminate()
+    GenerationProcesses.clear()
+    Salads.clear()
+    SaladDisplayIndexes.clear()
+    PickedSalads.clear()
+    # IngredientManager.ingredientSets.clear()
+    global SaladSetDisplayIndex
+    SaladSetDisplayIndex = 0
+
+def Action_RotateSalad():
+    PickedSalads[SaladSetDisplayIndex].rotate()
+    setsalad(PickedSalads[SaladSetDisplayIndex])
+
+def Action_NextLevel():
+    global currentLevelIndex, currentGroupIndex
+    if currentGroupIndex != -1:
+        # what to do if playing groups
+        if Groups[currentGroupIndex].completed_levels_number < Groups[currentGroupIndex].level_number:
+            SetWindow(Window_Play)
+            setsalad(Groups[currentGroupIndex].levels[currentLevelIndex])
+            print(currentLevelIndex)
+        else:
+            SetWindow(Window_ChooseGame)
+    else:
+        # single levels
+        if currentLevelIndex + 1 < len(Levels):
+            currentLevelIndex += 1
+            SetWindow(Window_Play)
+            setsalad(Levels[currentLevelIndex])
+        else:
+            SetWindow(Window_Home)
+
+    for wb in SaladWordBoxes:
+        wb.hidden = True
+
+
+def Action_PasteClipboardToWords():
+    clipboard = pg.scrap.get(pg.SCRAP_TEXT).decode("utf-8", "replace").replace('\r\n', '\n')
+    if clipboard:
+        for word in clipboard.split('\n'):
+            for l in range(len(word)):
+                if not (97 <= ord(word[l]) <= 122):
+                    word.replace(word[l], '', 1)
+            if 4 <= len(word) <= 16:
+                ScrollList_WordInputs.add(word)
+        
+
+def Enter_WordInputTextField(slist, text):
+    inx = slist.items.index(text)
+
+    if inx + 1 != len(slist.items): # if isn't last item
+        slist.items[inx].active = False
+        if text.text == '':
+            slist.remove(inx)
+    elif text.text != '':
+        slist.items[inx].active = False
+
+    text.set()
+
+    if slist.items[-1].text != '':
+        slist.add("")
+        slist.items[-1].active = True
+
+
+
+def start():
+    pg.init()
+    pg.scrap.init()
+    
+    global running, SaladSetDisplayIndex
+    running = True
+    SaladSetDisplayIndex = None
+    SetWindow(Window_Home)
+    GetLevels()
+    GetGroups()
+
+def stop():
+    global running
+    running = False
+    for process in GenerationProcesses:
+        process.terminate()
+
+
+
+
+
+
+def Enter_TitleText(self): 
+    TitleTexts[0].desactivate()
+    TitleTexts[1].activate()
+def Enter_SubtitleText(self): 
+    TitleTexts[1].desactivate()
+def titlewrite(self):
+    setTitle(self.text)
+def subtitlewrite(self):
+    setSubtitle(self.text)
+
+
+if __name__ == '__main__':
+    screen = pg.display.set_mode((1280, 720))
+    # screen = pg.display.set_mode((0, 0), pg.HWSURFACE | pg.DOUBLEBUF | pg.FULLSCREEN)
+    SCREEN_WIDTH = pg.display.Info().current_w
+    SCREEN_HEIGHT = pg.display.Info().current_h
+    pg.display.set_caption("Word Guacamole")
+    clock = pg.time.Clock()
+
+    start()
+
+    info_file = "data/info.txt"
+    completed_folder = "data/levels/completed/"
+
+
+
+    # Button images
+    ButtonImage_arrow = pg.image.load("images/next_salad.png").convert_alpha()
+
+    ButtonImage_next = pg.image.load("images/play.png").convert_alpha()
+    ButtonImage_Generate = pg.image.load("images/Generate_square.png").convert_alpha()
+    ButtonImage_go = pg.image.load("images/go.png").convert_alpha()
+    ButtonImage_next_salad = ButtonImage_arrow
+    ButtonImage_previous_salad = pg.transform.flip(ButtonImage_arrow, True, False)
+    ButtonImage_next_salad_variant = pg.transform.rotate(ButtonImage_arrow, -90)
+    ButtonImage_previous_salad_variant = pg.transform.rotate(ButtonImage_arrow, 90)
+    ButtonImage_pick = pg.image.load("images/pick.png").convert_alpha()
+    ButtonImage_save = pg.image.load("images/save.png").convert_alpha()
+    ButtonImage_home = pg.image.load("images/home.png").convert_alpha()
+    ButtonImage_quit = pg.image.load("images/quit.png").convert_alpha()
+    ButtonImage_rotate = pg.image.load("images/rotate.png").convert_alpha()
+
+    # Buttons
+    nxbt = Button(Window_Home, nxbtact, SCREEN_WIDTH/5*3 + 15, SCREEN_HEIGHT/2 + 75, ButtonImage_next, 0.5)
+    Button_Generate = Button(Window_Home, Action_Generate, SCREEN_WIDTH/5*2 - 15, SCREEN_HEIGHT/2 + 75, ButtonImage_Generate, 0.5)
+    Button_Go = Button(Window_Generate, Action_Go, 380, 685, ButtonImage_go, 0.4)
+    Button_NextSaladSet = Button(Window_Results, Action_NextSaladSet, SCREEN_WIDTH/2 + 2*SALAD_BLOCK_SIZE + 60, SCREEN_HEIGHT/2, ButtonImage_next_salad, 0.2)
+    Button_PreviousSaladSet = Button(Window_Results, Action_PreviousSaladSet, SCREEN_WIDTH/2 - 2*SALAD_BLOCK_SIZE - 60, SCREEN_HEIGHT/2, ButtonImage_previous_salad, 0.2)
+    Button_NextSalad = Button(Window_Results, Action_NextSalad, SCREEN_WIDTH/2, SCREEN_HEIGHT - 60, ButtonImage_next_salad_variant, 0.2)
+    Button_PreviousSalad = Button(Window_Results, Action_PreviousSalad, SCREEN_WIDTH/2, 60, ButtonImage_previous_salad_variant, 0.2)
+    Button_NextSaladSave = Button(Window_Save, Action_NextSaladSave, SCREEN_WIDTH/2 + 2*SALAD_BLOCK_SIZE + 60, SCREEN_HEIGHT/2, ButtonImage_next_salad, 0.2)
+    Button_PreviousSaladSave = Button(Window_Save, Action_PreviousSaladSave, SCREEN_WIDTH/2 - 2*SALAD_BLOCK_SIZE - 60, SCREEN_HEIGHT/2, ButtonImage_previous_salad, 0.2)
+    Button_Pick = Button(Window_Results, Action_PickSalad, SCREEN_WIDTH - ButtonImage_pick.get_width()//2*0.4, SCREEN_HEIGHT - ButtonImage_pick.get_height()//2*0.4, ButtonImage_pick, 0.4)
+    Button_Save = Button(Window_Results, Action_Save, ButtonImage_save.get_width()//2*0.4, SCREEN_HEIGHT - ButtonImage_save.get_height()//2*0.4, ButtonImage_save, 0.4)
+    Button_Export = Button(Window_Save, Action_Export, ButtonImage_save.get_width()//2*0.4, SCREEN_HEIGHT - ButtonImage_save.get_height()//2*0.4, ButtonImage_save, 0.4)
+    Button_Home = Button([Window_Generate, Window_Results, Window_Save, Window_ChooseGame, Window_Play, Window_Finish], Action_Home, ButtonImage_home.get_width()*0.3//2, ButtonImage_home.get_height()*0.3//2, ButtonImage_home, 0.3)
+    Button_Quit = Button(Window_Home, stop, SCREEN_WIDTH - ButtonImage_quit.get_width()*0.3//2, ButtonImage_quit.get_height()*0.3//2, ButtonImage_quit, 0.3)
+    Button_RotateSalad = Button(Window_Save, Action_RotateSalad, SCREEN_WIDTH*5//6, SCREEN_HEIGHT//5*4, ButtonImage_rotate, 0.4)
+    Button_NextLevel = Button(Window_Finish, Action_NextLevel, SCREEN_WIDTH//2, SCREEN_HEIGHT*0.65, ButtonImage_next, 0.3)
+
+    # Scroll Lists
+    ScrollList_WordInputs = ScrollList(Window_Generate, SCREEN_WIDTH//100, SCREEN_HEIGHT//8, SCREEN_WIDTH//15*6, SCREEN_HEIGHT*9//10, enter=Enter_WordInputTextField)
+
+    # Input Texts
+    TitleTexts = []
+    TextInput_Title = TextInput(Window_Generate, "Title", "white", SCREEN_WIDTH-300, 75, 600, 100, write=titlewrite, enter=Enter_TitleText)
+    TextInput_Subtitle = TextInput(Window_Generate, "Subtitle", "white", SCREEN_WIDTH-300, 170, 600, 45, write=subtitlewrite, enter=Enter_SubtitleText)
+    TitleTexts.extend([TextInput_Title, TextInput_Subtitle])
+    # Texts
+    Text_WordSaladMainScreenTitle = Text(Window_Home, "Word Salad", 100, "#ffffff", 640, 200, "freesansbold.ttf")
+    Text_NextLevel = Text(Window_Finish, "", 80, "white", SCREEN_WIDTH//2, SCREEN_HEIGHT*0.5)
+
+    ScrollList_WordInputs.add('into')
+    ScrollList_WordInputs.add('open')
+    ScrollList_WordInputs.add('free')
+    ScrollList_WordInputs.add('even')
+    ScrollList_WordInputs.add('apart')
+    # ScrollList_WordInputs.add('abone')
+    # ScrollList_WordInputs.add('outof')
+    # ScrollList_WordInputs.add('aleg')
+    # ScrollList_WordInputs.add('dance')
+    # ScrollList_WordInputs.add('fast')
+    # ScrollList_WordInputs.add('thelaw')
+
+    # Numbers
+    Number_WordRequirement = NumberInput(Window_Generate, "Word Requirement", SCREEN_WIDTH*7//15, SCREEN_HEIGHT//5, 80, 5, 12, 4, image=pg.image.load("images/next_salad.png").convert_alpha())
+
+    # Keys
+    Window_Results.add_key([pg.K_w, pg.K_UP], Action_PreviousSalad)
+    Window_Results.add_key([pg.K_a, pg.K_LEFT], Action_PreviousSaladSet)
+    Window_Results.add_key([pg.K_s, pg.K_DOWN], Action_NextSalad)
+    Window_Results.add_key([pg.K_d, pg.K_RIGHT], Action_NextSaladSet)
+    Window_Save.add_key([pg.K_a, pg.K_LEFT], Action_PreviousSaladSave)
+    Window_Save.add_key([pg.K_w, pg.K_UP], Action_PreviousSaladSave)
+    Window_Save.add_key([pg.K_s, pg.K_DOWN], Action_NextSaladSave)
+    Window_Save.add_key([pg.K_d, pg.K_RIGHT], Action_NextSaladSave)
+    Window_Generate.add_key(pg.K_RETURN, Action_Go)
+    Window_Home.add_key(pg.K_RETURN, Action_Generate)
+    Window_Generate.add_key(pg.K_RIGHT, Number_WordRequirement.add, pg.K_n)
+    Window_Generate.add_key(pg.K_LEFT, Number_WordRequirement.substract, pg.K_n)
+    Window_Generate.add_key(pg.K_v, Action_PasteClipboardToWords, pg.KMOD_CTRL)
+
+    size = SALAD_BLOCK_SIZE
+    for i in range(4):
+        temp = []
+        for j in range(4):
+            temp.append(Block([Window_Results, Window_Save, Window_Play], i, j, size, SCREEN_WIDTH/2 - 1.5*size + size*j, SCREEN_HEIGHT/2 - 1.5*size + size*i))
+        LetterBlocks.append(temp)
+
+
+
+    global running
+    while running:
+
+            current_window.draw(screen)
+
+            if SHOWMOUSEPOS == True:
+                print(pg.mouse.get_pos())
+
+            for event in pg.event.get():
+                match event.type:
+                    case pg.QUIT:
+                        stop()
+                    case pg.MOUSEBUTTONDOWN:
+                        current_window.checkInput(event.button)
+                    case pg.MOUSEWHEEL:
+                        scale = 22
+                        if current_window == Window_Generate:
+                            ScrollList_WordInputs.checkInput(pg.mouse.get_pos(), event.y, screen)
+                    case pg.KEYDOWN:
+                        writing = None
+                        for it in current_window.intexts:
+                            if it.active == True:
+                                writing = it
+                                break
+
+                        if writing != None: 
+                            writing.write(event)
+                        else:
+                            current_window.check_keys(event)
+
+            pg.display.update()
+
+            clock.tick(60)
+
+    pg.quit()
