@@ -1,0 +1,94 @@
+import copy
+from multiprocessing import Process, Queue
+from Constants import*
+from Ingredients import Ingredients, sortIng_length
+from SaladSet import SaladSet
+from SaladGenerator import makeSalad
+
+def fac(x):
+    return 1 * (i for i in range(1, x+1))
+
+def choose(n, k):
+    return fac(n)/(fac(k)*fac(n-k))
+
+
+def manage(inputWords, WORD_REQUIREMENT):
+
+    ingredientSets = []
+
+    sortIng_length(inputWords) # sort words by length (longest are assumed to be hardest to fit)
+
+    for i in range(inputWords.number): # create groups of words theoretically possible to fit
+        checkIfFits(Ingredients(), inputWords.words, i, WORD_REQUIREMENT, ingredientSets)
+
+    ingredientSets.sort(key=lambda n: n.number, reverse=True)
+
+    for n, ing in enumerate(ingredientSets[:10]):
+        print(ing.number)
+        Salads.append(SaladSet(ing))
+        OutputSalads.append(Queue())
+        SaladDisplayIndexes.append(None)
+        SaladLengths.append(0)
+        process = Process(target=makeSalad, args=(OutputSalads[n],copy.deepcopy(ing),), name=str(n))
+        GenerationProcesses.append(process)
+        process.start()
+
+
+def checkIfFits(ingredients, wordSet, index, WORD_REQUIREMENT, ingredientSets):
+
+    ingredients.add(wordSet[index])
+
+    if ingredients.letterNumber > 16:
+        return
+
+    for i in range(index+1, len(wordSet)): # try adding next word
+        checkIfFits(copy.deepcopy(ingredients), wordSet, i, WORD_REQUIREMENT, ingredientSets)
+
+    if ingredients.number >= WORD_REQUIREMENT:
+        ingredientSets.append(copy.deepcopy(ingredients))
+
+
+def removeSimilar(saladset):
+
+    i = 0
+    while i < saladset.number:
+
+        repeat_outer_loop = False
+
+        j = i + 1
+        while j < saladset.number:
+
+            # comparing i with j
+
+            repeat_inner_loop = False
+
+            similar_letters = 0
+            for row in range(4):
+                for col in range(4):
+                    if saladset.salads[i].grid[row][col].letter == saladset.salads[j].grid[row][col].letter:
+                        similar_letters += 1
+
+            if similar_letters >= 8:
+
+                # similar salads; removing 1
+
+                if saladset.salads[i].difficulty >= saladset.salads[j].difficulty:
+
+                    # deleting j
+
+                    saladset.pop(j)
+                    repeat_inner_loop = True
+                else:
+
+                    # deleting i
+
+                    saladset.swap(i, j)
+                    saladset.pop(j)
+                    repeat_outer_loop = True
+                    break
+
+            if not repeat_inner_loop:
+                j += 1
+
+        if not repeat_outer_loop: 
+            i += 1
