@@ -1,0 +1,130 @@
+from copy import deepcopy
+from multiprocessing import Process, Queue
+from Constants import*
+from Word import Word
+from Ingredients import Ingredients, sortIng_length
+from SaladSet import SaladSet
+import SaladGenerator 
+
+
+def manage(inputWords, WORD_REQUIREMENT):
+
+    sortIng_length(inputWords) # sort words by length (longest are assumed to be hardest to fit)
+
+    for i in range(inputWords.number): # create groups of words theoretically possible to fit
+        checkIfFits(Ingredients(), inputWords.words, i, WORD_REQUIREMENT)
+
+    IngredientSets.sort(key=lambda n: n.number, reverse=True)
+    global IngredientIndexes
+    IngredientIndexes = [-1] * IngredientSets[0].number
+
+    last = 0
+    for n in range(len(IngredientSets)):
+        if IngredientSets[n].number != last:
+            Generation_IngredientNumbers.append(IngredientSets[n].number)
+            IngredientIndexes[IngredientSets[n].number - 1] = n
+            last = IngredientSets[n].number
+
+            OutputSalads_Search.append(Queue())
+            process = Process(target=SaladGenerator.makeSalad, args=(OutputSalads_Search[-1],deepcopy(IngredientSets[n])), name=str(n))
+            GenerationProcesses_Search.append(process)
+            process.start()
+
+
+def searchSuccess(inx, ing):
+    global IngredientIndexes
+    i = 0
+    while i < len(Generation_IngredientNumbers):
+        if Generation_IngredientNumbers[i] <= Generation_IngredientNumbers[inx]: # more valuable salad was generated (higher word count)
+            Generation_IngredientNumbers.pop(i)
+            GenerationProcesses_Search[i].terminate()
+            GenerationProcesses_Search.pop(i)
+            OutputSalads_Search.pop(i)
+
+            if i == inx:
+                ingredients = Ingredients()
+                words = [Word(word.letters) for word in ing.words]
+                ingredients.add(words)
+
+                OutputSalads_Display.append(Queue())
+                process = Process(target=SaladGenerator.makeSalad, args=(OutputSalads_Display[-1],ingredients))
+                GenerationProcesses_Display.append(process)
+                process.start()
+
+                Salads.append(SaladSet(ingredients))
+                SaladDisplayIndexes.append(None)
+                SaladLengths.append(0)
+        else:
+            i += 1
+
+    if ing.number == len(IngredientIndexes):
+        return
+
+    i = IngredientIndexes[ing.number] + 1
+    while i > IngredientIndexes[ing.number - 1] and len(GenerationProcesses_Search) + IngredientIndexes[ing.number] + 1 - i <= 10:
+        OutputSalads_Search.append(Queue())
+        process = Process(target=SaladGenerator.makeSalad, args=(OutputSalads_Search[-1],IngredientSets[i]), name=str(i))
+        GenerationProcesses_Search.append(process)
+        process.start()
+
+
+
+
+def checkIfFits(ingredients, wordSet, index, WORD_REQUIREMENT):
+
+    ingredients.add(wordSet[index])
+
+    if ingredients.letterNumber > 16:
+        return
+
+    for i in range(index+1, len(wordSet)): # try adding next word
+        checkIfFits(deepcopy(ingredients), wordSet, i, WORD_REQUIREMENT)
+
+    if ingredients.number >= WORD_REQUIREMENT:
+        IngredientSets.append(deepcopy(ingredients))
+
+
+def removeSimilar(saladset):
+
+    i = 0
+    while i < saladset.number:
+
+        repeat_outer_loop = False
+
+        j = i + 1
+        while j < saladset.number:
+
+            # comparing i with j
+
+            repeat_inner_loop = False
+
+            similar_letters = 0
+            for row in range(4):
+                for col in range(4):
+                    if saladset.salads[i].grid[row][col].letter == saladset.salads[j].grid[row][col].letter:
+                        similar_letters += 1
+
+            if similar_letters >= 8:
+
+                # similar salads; removing 1
+
+                if saladset.salads[i].difficulty >= saladset.salads[j].difficulty:
+
+                    # deleting j
+
+                    saladset.pop(j)
+                    repeat_inner_loop = True
+                else:
+
+                    # deleting i
+
+                    saladset.swap(i, j)
+                    saladset.pop(j)
+                    repeat_outer_loop = True
+                    break
+
+            if not repeat_inner_loop:
+                j += 1
+
+        if not repeat_outer_loop: 
+            i += 1
